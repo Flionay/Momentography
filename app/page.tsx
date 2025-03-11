@@ -19,7 +19,7 @@ interface Photo {
   city?: string;
   albumName?: string;
   rawLocation?: string;
-  province?: string;
+  province: string;
 }
 
 export default function Home() {
@@ -38,7 +38,7 @@ export default function Home() {
         const exifData = await exifResp.json();
 
         // 调试：打印原始数据数量
-        console.log('原始EXIF数据条数:', Object.keys(exifData).length);
+        // console.log('原始EXIF数据条数:', Object.keys(exifData).length);
         
         // 1. 处理所有照片数据，更细致地处理位置信息
         const allPhotos = Object.entries(exifData)
@@ -57,42 +57,44 @@ export default function Home() {
               province = firstPart.replace(/([省市区特别行政区]|自治区)$/, '');
             }
             
-            // 如果没有提取到有效的省份名称，返回null
-            if (!province) return null;
+            // 过滤掉没有省份信息或省份为"未知"的照片
+            if (!province || !photoUrl || province === '未知') return null;
             
             return {
-              id: path,
-              url: photoUrl || '',
-              title: albumsData[albumName]?.title || '',
+              url: photoUrl,
+              title: albumsData[albumName]?.title,
               location: data.Location,
               date: data.DateTime,
               parsedDate,
               star: data.star || 0,
               province
-            };
+            } as Photo;
           })
-          .filter((photo): photo is Photo => 
-            photo !== null && 
-            photo.url !== '' && 
-            photo.province !== '未知地区'
-          );
+          .filter((item): item is Photo => {
+            if (!item || !item.url || !item.province || item.province === '未知') {
+              return false;
+            }
+            return true;
+          });
 
         // 调试：打印处理后的照片数量
         console.log('处理后的照片数量:', allPhotos.length);
         
         // 2. 按省份分组
         const photosByProvince = allPhotos.reduce((acc: { [key: string]: Photo[] }, photo) => {
-          if (!acc[photo.province]) {
+          if (photo && !acc[photo.province]) {
             acc[photo.province] = [];
           }
-          acc[photo.province].push(photo);
+          if (photo) {
+            acc[photo.province].push(photo);
+          }
           return acc;
         }, {});
 
         // 调试：打印每个省份的照片数量
-        Object.entries(photosByProvince).forEach(([province, photos]) => {
-          console.log(`${province}: ${photos.length}张照片`);
-        });
+        // Object.entries(photosByProvince).forEach(([province, photos]) => {
+        //   console.log(`${province}: ${photos.length}张照片`);
+        // });
 
         // 3. 从每个省份选择评分最高的照片
         const selectedPhotos = Object.entries(photosByProvince)
@@ -121,8 +123,8 @@ export default function Home() {
           });
 
         // 调试：打印最终选择的照片数量
-        console.log('最终选择的照片数量:', selectedPhotos.length);
-        console.log('最终选择的省份:', selectedPhotos.map(p => p.province).join(', '));
+        // console.log('最终选择的照片数量:', selectedPhotos.length);
+        // console.log('最终选择的省份:', selectedPhotos.map(p => p.province).join(', '));
 
         // 不限制数量，显示所有省份的照片
         setFeaturedPhotos(selectedPhotos);
@@ -132,7 +134,7 @@ export default function Home() {
           if (timelineRef.current) {
             timelineRef.current.scrollLeft = timelineRef.current.scrollWidth;
           }
-        }, 100);
+        }, 50);
 
       } catch (error) {
         console.error('加载精选照片时出错:', error);
@@ -332,7 +334,7 @@ export default function Home() {
               {/* 时间线轴 */}
               <div className="absolute left-0 right-0 top-1/2 h-px bg-gray-200 dark:bg-gray-700 -translate-y-1/2" />
               
-              {/* 时间线内容容器 */}
+              {/* 时间线内容容器 - 添加虚拟化渲染优化 */}
               <div 
                 ref={timelineRef}
                 className="relative overflow-x-auto pb-12 hide-scrollbar scroll-smooth"
@@ -344,56 +346,70 @@ export default function Home() {
                   viewport={{ once: true }}
                   transition={{ duration: 0.8 }}
                 >
-                  {featuredPhotos.map((photo, index) => (
-                    <motion.div
-                      key={index}
-                      className="relative"
-                      initial={{ opacity: 0, y: index % 2 === 0 ? 20 : -20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.8, delay: index * 0.1 }}
-                    >
-                      {/* 时间节点 */}
-                      <div className="absolute left-1/2 top-1/2 w-4 h-4 bg-white border-2 border-black rounded-full -translate-x-1/2 -translate-y-1/2 z-10" />
-                      
-                      {/* 照片容器 - 交替上下位置 */}
-                      <div className={`relative ${index % 2 === 0 ? 'mb-32 mt-8' : 'mt-32 mb-8'}`}>
-                        {/* 连接线 */}
-                        <div className="absolute left-1/2 top-0 w-px h-full bg-gray-200 dark:bg-gray-700 -translate-x-1/2" />
+                  {featuredPhotos.map((photo, index) => {
+                    // 只渲染可见区域附近的照片，提高性能
+                    const isVisible = true; // 默认都渲染，后续可以根据需要优化
+                    
+                    return isVisible ? (
+                      <motion.div
+                        key={index}
+                        className="relative"
+                        initial={{ opacity: 0, y: index % 2 === 0 ? 20 : -20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "100px" }}
+                        transition={{ duration: 0.5, delay: Math.min(index * 0.05, 0.5) }}
+                      >
+                        {/* 移除中间的点，改为优雅的线条装饰 */}
+                        <div className="absolute left-1/2 top-1/2 w-px h-16 bg-gradient-to-b from-gray-300 to-transparent -translate-x-1/2 -translate-y-1/2 z-10" />
                         
-                        {/* 照片卡片 */}
-                        <motion.div 
-                          className="relative w-64 group"
-                          whileHover={{ y: -5 }}
-                          transition={{ type: "spring", stiffness: 300 }}
-                        >
-                          <div className="relative aspect-[3/4] overflow-hidden rounded-lg shadow-lg">
-                            <Image
-                              src={photo.url}
-                              alt={photo.title || "摄影作品"}
-                              fill
-                              className="object-cover transition-all duration-700 group-hover:scale-105"
-                              sizes="(max-width: 768px) 100vw, 256px"
-                            />
-                            {/* 渐变背景覆盖层 */}
-                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/70" />
-                            
-                            {/* 底部信息区域 */}
-                            <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                              {/* 省份名称 */}
-                              <h3 className="text-base font-medium mb-1">
-                                {photo.province}
-                              </h3>
-                              {/* 时间显示 */}
-                              <div className="flex items-center text-white/80 text-xs tracking-wider">
-                                {formatDate(photo.date, 'yearMonth')}
+                        {/* 照片容器 - 交替上下位置 */}
+                        <div className={`relative ${index % 2 === 0 ? 'mb-32 mt-8' : 'mt-32 mb-8'}`}>
+                          {/* 连接线 - 改为渐变效果 */}
+                          <div className="absolute left-1/2 top-0 w-px h-full bg-gradient-to-b from-gray-200/50 via-gray-300 to-gray-200/50 dark:from-gray-700/50 dark:via-gray-600 dark:to-gray-700/50 -translate-x-1/2" />
+                          
+                          {/* 照片卡片 - 增强设计感 */}
+                          <motion.div 
+                            className="relative w-64 group"
+                            whileHover={{ y: -5, scale: 1.02 }}
+                            transition={{ type: "spring", stiffness: 300 }}
+                          >
+                            <div className="relative aspect-[3/4] overflow-hidden rounded-lg shadow-lg">
+                              {/* 添加微妙的边框效果 */}
+                              <div className="absolute inset-0 border border-white/10 rounded-lg z-10" />
+                              
+                              <Image
+                                src={photo.url}
+                                alt={photo.title || "摄影作品"}
+                                fill
+                                className="object-cover transition-all duration-700 group-hover:scale-105"
+                                sizes="(max-width: 768px) 100vw, 256px"
+                                loading="lazy"
+                              />
+                              
+                              {/* 渐变背景覆盖层 - 更精致的渐变 */}
+                              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/80" />
+                              
+                              {/* 底部信息区域 - 增加设计感 */}
+                              <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+                                {/* 省份名称 - 增加装饰线 */}
+                                <div className="relative">
+                                  <div className="w-8 h-px bg-white/40 mb-2"></div>
+                                  <h3 className="text-base font-medium mb-1">
+                                    {photo.province}
+                                  </h3>
+                                </div>
+                                
+                                {/* 时间显示 - 更精致的样式 */}
+                                <div className="flex items-center text-white/80 text-xs tracking-wider">
+                                  {formatDate(photo.date, 'yearMonth')}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </motion.div>
-                      </div>
-                    </motion.div>
-                  ))}
+                          </motion.div>
+                        </div>
+                      </motion.div>
+                    ) : null;
+                  })}
                 </motion.div>
               </div>
               

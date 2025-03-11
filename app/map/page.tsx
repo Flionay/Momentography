@@ -48,6 +48,11 @@ const Popup = dynamic(
   { ssr: false }
 );
 
+const AMapContainer = dynamic(
+  () => import('@/app/components/AMapContainer'),
+  { ssr: false }
+);
+
 interface Photo {
   id: string;
   url: string;

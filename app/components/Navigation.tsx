@@ -30,7 +30,9 @@ export default function Navigation() {
   return (
     <header 
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'bg-white/90 backdrop-blur-md shadow-sm' : 'bg-transparent'
+        isScrolled 
+          ? 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-sm dark:shadow-gray-800/30' 
+          : 'bg-transparent'
       }`}
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -38,7 +40,7 @@ export default function Navigation() {
           <div className="flex-shrink-0">
             <Link 
               href="/" 
-              className="text-xl font-bold tracking-tighter"
+              className="text-xl font-bold tracking-tighter dark:text-white"
             >
               影忆
             </Link>
@@ -57,8 +59,8 @@ export default function Navigation() {
                       href={link.href}
                       className={`flex items-center space-x-1 py-2 transition-colors relative ${
                         isActive 
-                          ? 'text-black font-medium' 
-                          : 'text-gray-600 hover:text-black'
+                          ? 'text-black dark:text-white font-medium' 
+                          : 'text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white'
                       }`}
                     >
                       <Icon size={18} weight={isActive ? "fill" : "regular"} />
@@ -66,7 +68,7 @@ export default function Navigation() {
                       {isActive && (
                         <motion.div 
                           layoutId="navbar-indicator"
-                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-black"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-black dark:bg-white"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ duration: 0.3 }}
@@ -81,7 +83,7 @@ export default function Navigation() {
           
           {/* 移动菜单按钮 */}
           <button 
-            className="md:hidden p-2 rounded-md text-gray-600 hover:text-black hover:bg-gray-100"
+            className="md:hidden p-2 rounded-md text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             <List size={24} />
@@ -92,7 +94,7 @@ export default function Navigation() {
       {/* 移动导航菜单 */}
       {isMobileMenuOpen && (
         <motion.div 
-          className="md:hidden bg-white shadow-lg"
+          className="md:hidden bg-white dark:bg-gray-900 shadow-lg dark:shadow-gray-800/30"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
@@ -109,8 +111,8 @@ export default function Navigation() {
                     href={link.href}
                     className={`flex items-center space-x-3 p-3 rounded-md ${
                       isActive 
-                        ? 'bg-gray-100 text-black font-medium' 
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-black'
+                        ? 'bg-gray-100 dark:bg-gray-800 text-black dark:text-white font-medium' 
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-black dark:hover:text-white'
                     }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

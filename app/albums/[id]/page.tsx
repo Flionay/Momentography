@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, ArrowLeft, Camera } from 'phosphor-react';
+import { MapPin, Calendar, ArrowLeft, Camera } from  '@phosphor-icons/react';
 import { Dialog } from '@headlessui/react';
 
 interface Photo {
@@ -57,7 +57,7 @@ export default function AlbumPage() {
         
         // 处理照片数据
         const processedPhotos = currentAlbum.images.map((url: string) => {
-          const fileName = url.split('/').pop()?.split('.')[0];
+          const fileName = url.split('/').pop()?.split('.')[0] ?? '';
           const exif = Object.entries(exifData).find(([path]) => path.includes(fileName));
           
           return {
