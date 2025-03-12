@@ -6,11 +6,27 @@ import { motion } from 'framer-motion';
 import { Camera, MapPin, Calendar, Star, Heart, X } from '@phosphor-icons/react';
 import { Dialog } from '@headlessui/react';
 import { formatDate, parseExifDate } from '@/app/utils/dateFormat';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+// 删除 react-leaflet 导入
+// import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+// 移除直接导入
+// import L from 'leaflet';
 import AMapContainer from '@/app/components/AMapContainer';
 import { MAP_CONFIG } from '@/app/config/map';
+
+// 在组件内部动态导入 Leaflet
+let L: any;
+if (typeof window !== 'undefined') {
+  L = require('leaflet');
+  
+  // 修复 Leaflet 图标问题
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: '/images/marker-icon-2x.png',
+    iconUrl: '/images/marker-icon.png',
+    shadowUrl: '/images/marker-shadow.png',
+  });
+}
 
 interface Photo {
   id: string;
@@ -27,14 +43,6 @@ interface Photo {
     [key: string]: string | number | null;
   };
 }
-
-// 修复 Leaflet 图标问题
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: '/images/marker-icon-2x.png',
-  iconUrl: '/images/marker-icon.png',
-  shadowUrl: '/images/marker-shadow.png',
-});
 
 // 中国地图的默认中心点和缩放级别
 const CHINA_CENTER: [number, number] = [35.8617, 104.1954];

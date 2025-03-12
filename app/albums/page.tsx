@@ -89,7 +89,7 @@ export default function AlbumsPage() {
                 className="group"
               >
                 <Link href={`/albums/${album.id}`} className="block">
-                  <div className="relative overflow-hidden rounded-xl shadow-lg transition-all duration-300 group-hover:shadow-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                  <div className="relative overflow-hidden rounded-xl shadow-lg transition-all duration-300 group-hover:shadow-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 h-full flex flex-col">
                     <div className="relative aspect-[16/9] overflow-hidden">
                       <Image
                         src={album.images[0]}
@@ -101,7 +101,7 @@ export default function AlbumsPage() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent opacity-70" />
                     </div>
                     
-                    <div className="p-6">
+                    <div className="p-6 flex flex-col flex-grow">
                       <h2 className="text-xl font-bold mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{album.title}</h2>
                       
                       <div className="flex items-center space-x-4 mb-3 text-sm text-gray-600 dark:text-gray-400">
@@ -115,9 +115,11 @@ export default function AlbumsPage() {
                         </div>
                       </div>
                       
-                      <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2 mb-3">{album.desc}</p>
+                      <div className="h-12 overflow-hidden mb-3">
+                        <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2">{album.desc}</p>
+                      </div>
                       
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mt-auto">
                         <span className="text-xs px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full">
                           {album.images.length} 张照片
                         </span>

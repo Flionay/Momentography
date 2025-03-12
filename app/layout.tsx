@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "影忆 | 摄影作品展示",
+  title: "Momentography | 摄影作品展示",
   description: "个人摄影作品展示网站，记录生活中的美好瞬间",
 };
 

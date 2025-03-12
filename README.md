@@ -105,9 +105,9 @@ ADMIN_PASSWORD=your_admin_password
 ## 👤 作者
 
 作者名字
-- Website: [您的网站]
-- GitHub: [@您的GitHub用户名]
-
+- Website: [www.angyi.online]
+- GitHub: [@flionay]
+- Email: [angyi_jq@163.com]
 ## 🙏 致谢
 
 - 感谢所有贡献者

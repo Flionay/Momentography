@@ -19,13 +19,11 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error('读取点赞数据失败:', error);
     }
-    
     // 更新数据
-    likesData[photoId] = likes;
+    likesData = { ...likesData, [photoId]: likes };
     
     // 写入文件
     fs.writeFileSync(dataFilePath, JSON.stringify(likesData, null, 2));
-    
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('保存点赞数据失败:', error);

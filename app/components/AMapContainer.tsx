@@ -1,7 +1,14 @@
+'use client';
+
 import { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
 import { MAP_CONFIG } from '@/app/config/map';
 import 'leaflet/dist/leaflet.css'; // 确保 CSS 被导入
+
+// 动态导入 Leaflet
+let L: any;
+if (typeof window !== 'undefined') {
+  L = require('leaflet');
+}
 
 interface AMapContainerProps {
   center: [number, number];
@@ -12,7 +19,7 @@ interface AMapContainerProps {
 
 export default function AMapContainer({ center, zoom, marker = true, location }: AMapContainerProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 使用媒体查询检测暗色主题
@@ -21,6 +28,15 @@ export default function AMapContainer({ center, zoom, marker = true, location }:
     : false;
 
   useEffect(() => {
+    // 确保在客户端环境
+    if (typeof window === 'undefined') return;
+    
+    // 确保 Leaflet 已加载
+    if (!L) {
+      setError('地图库加载失败');
+      return;
+    }
+
     // 清理之前的地图实例
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
@@ -89,7 +105,7 @@ export default function AMapContainer({ center, zoom, marker = true, location }:
         const map = mapInstanceRef.current;
         
         // 移除旧图层
-        map.eachLayer((layer) => {
+        map.eachLayer((layer: any) => {
           if (layer instanceof L.TileLayer) {
             map.removeLayer(layer);
           }

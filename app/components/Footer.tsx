@@ -3,43 +3,18 @@
 import React from 'react';
 import Link from 'next/link';
 import { Heart, InstagramLogo, GithubLogo, TwitterLogo, EnvelopeSimple, Copyright } from '@phosphor-icons/react';
+import { FOOTER_CONFIG } from '../config/footer';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
   
-  const footerLinks = [
-    { name: '关于', href: '/about' },
-    { name: '隐私政策', href: '/privacy' },
-    { name: '使用条款', href: '/terms' },
-    { name: '联系我们', href: '/contact' },
-  ];
-
-  const socialLinks = [
-    { 
-      name: 'Instagram', 
-      href: 'https://instagram.com', 
-      icon: InstagramLogo,
-      hoverColor: 'hover:text-pink-500'
-    },
-    { 
-      name: 'Twitter', 
-      href: 'https://twitter.com', 
-      icon: TwitterLogo,
-      hoverColor: 'hover:text-blue-400'
-    },
-    { 
-      name: 'GitHub', 
-      href: 'https://github.com', 
-      icon: GithubLogo,
-      hoverColor: 'hover:text-gray-900 dark:hover:text-white'
-    },
-    { 
-      name: 'Email', 
-      href: 'mailto:contact@example.com', 
-      icon: EnvelopeSimple,
-      hoverColor: 'hover:text-green-500'
-    },
-  ];
+  // 社交媒体图标映射
+  const socialIcons = {
+    'Instagram': InstagramLogo,
+    'Twitter': TwitterLogo,
+    'GitHub': GithubLogo,
+    'Email': EnvelopeSimple,
+  };
 
   return (
     <footer className="bg-white dark:bg-gray-900 mt-auto">
@@ -50,11 +25,11 @@ export default function Footer() {
           <div className="space-y-4">
             <Link href="/" className="inline-block">
               <span className="text-2xl font-bold tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                影忆
+                {FOOTER_CONFIG.COMPANY.NAME}
               </span>
             </Link>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              记录光与影的诗意，捕捉生活的瞬间之美。让每一帧都成为永恒的回忆。
+              {FOOTER_CONFIG.COMPANY.SLOGAN}
             </p>
           </div>
 
@@ -64,7 +39,7 @@ export default function Footer() {
               导航
             </h3>
             <ul className="space-y-2">
-              {footerLinks.map((link) => (
+              {FOOTER_CONFIG.NAVIGATION.map((link) => (
                 <li key={link.name}>
                   <Link 
                     href={link.href}
@@ -85,15 +60,15 @@ export default function Footer() {
             <ul className="space-y-2">
               <li>
                 <a 
-                  href="mailto:contact@example.com"
+                  href={`mailto:${FOOTER_CONFIG.COMPANY.EMAIL}`}
                   className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
-                  contact@example.com
+                  {FOOTER_CONFIG.COMPANY.EMAIL}
                 </a>
               </li>
               <li>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  中国 · 北京
+                  {FOOTER_CONFIG.COMPANY.LOCATION}
                 </span>
               </li>
             </ul>
@@ -105,18 +80,21 @@ export default function Footer() {
               关注我们
             </h3>
             <div className="flex space-x-4">
-              {socialLinks.map((social) => (
-                <a
-                  key={social.name}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`text-gray-400 ${social.hoverColor} transition-colors`}
-                  title={social.name}
-                >
-                  <social.icon size={20} weight="regular" />
-                </a>
-              ))}
+              {FOOTER_CONFIG.SOCIAL.map((social) => {
+                const SocialIcon = socialIcons[social.name as keyof typeof socialIcons];
+                return (
+                  <a
+                    key={social.name}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`text-gray-400 ${social.hoverColor} transition-colors`}
+                    title={social.name}
+                  >
+                    {SocialIcon && <SocialIcon size={20} weight="regular" />}
+                  </a>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -128,11 +106,11 @@ export default function Footer() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
               <Copyright size={16} className="mr-2" />
-              <span>{currentYear} 影忆。保留所有权利。</span>
+              <span>{currentYear} {FOOTER_CONFIG.COPYRIGHT.TEXT}</span>
             </div>
             <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
               <span className="flex items-center">
-                用 <Heart weight="fill" size={14} className="text-red-500 mx-1" /> 制作
+                {FOOTER_CONFIG.COPYRIGHT.LOVE_TEXT}
               </span>
             </div>
           </div>

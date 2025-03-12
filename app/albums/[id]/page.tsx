@@ -36,6 +36,16 @@ interface Album {
   images: string[];
 }
 
+interface AlbumData {
+  [key: string]: {
+    title: string;
+    desc: string;
+    date: string;
+    location: string;
+    images: string[];
+  };
+}
+
 export default function AlbumPage() {
   const params = useParams();
   const [album, setAlbum] = useState<Album | null>(null);
@@ -52,10 +62,17 @@ export default function AlbumPage() {
         // 获取相册数据
         const albumsResp = await fetch('/data/albums.json');
         if (!albumsResp.ok) throw new Error('无法加载相册数据');
-        const albumsData = await albumsResp.json();
+        const albumsData: AlbumData = await albumsResp.json();
         
         // 处理URL编码的ID
         let albumId = Array.isArray(params.id) ? params.id[0] : params.id;
+        
+        // 确保albumId是字符串类型
+        if (typeof albumId !== 'string') {
+          setError('无效的相册ID');
+          setIsLoading(false);
+          return;
+        }
         
         // 尝试URL解码
         try {
@@ -75,21 +92,23 @@ export default function AlbumPage() {
           return;
         }
         
+        const albumData = albumsData[albumId];
+        
         // 解析坐标
-        const locationStr = albumsData[albumId].location || '';
-        const coordinates = locationStr.split(',').map(coord => parseFloat(coord.trim())) as [number, number];
+        const locationStr = albumData.location || '';
+        const coordinates = locationStr.split(',').map((coord: string) => parseFloat(coord.trim())) as [number, number];
         
         // 设置相册数据
         const albumWithId: Album = {
-          id: albumId as string,
-          title: albumsData[albumId].title,
-          desc: albumsData[albumId].desc,
-          date: albumsData[albumId].date,
-          location: albumsData[albumId].location,
+          id: albumId,
+          title: albumData.title,
+          desc: albumData.desc,
+          date: albumData.date,
+          location: albumData.location,
           coordinates: coordinates.length === 2 && !isNaN(coordinates[0]) && !isNaN(coordinates[1]) 
             ? coordinates 
             : [0, 0],
-          images: albumsData[albumId].images || []
+          images: albumData.images || []
         };
         
         setAlbum(albumWithId);
@@ -162,7 +181,9 @@ export default function AlbumPage() {
         className="mb-12 text-center"
       >
         <h1 className="text-4xl font-bold mb-4">{album.title}</h1>
-        <p className="text-gray-600 max-w-2xl mx-auto">{album.desc}</p>
+        <div className="h-16 flex items-center justify-center">
+          <p className="text-gray-600 max-w-2xl mx-auto line-clamp-2">{album.desc}</p>
+        </div>
         
         <div className="flex items-center justify-center space-x-6 mt-4 text-sm text-gray-600">
           <div className="flex items-center">
@@ -206,71 +227,132 @@ export default function AlbumPage() {
         onClose={() => setSelectedPhoto(null)}
         className="relative z-50"
       >
-        <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/90" aria-hidden="true" />
         
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-4xl w-full bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
-            <div className="relative">
-              <button
-                onClick={() => setSelectedPhoto(null)}
-                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-              >
-                <X size={20} />
-              </button>
-              
-              <div className="relative aspect-[16/9] bg-gray-100 dark:bg-gray-900">
-                {selectedPhoto && (
-                  <Image
-                    src={selectedPhoto.url}
-                    alt="照片详情"
-                    fill
-                    className="object-contain"
-                  />
-                )}
-              </div>
-              
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <Dialog.Panel className="w-full max-w-6xl transform rounded-2xl bg-black text-left align-middle shadow-xl transition-all">
               {selectedPhoto && (
-                <div className="p-6">
-                  {/* 地图容器 */}
-                  {selectedPhoto.exif.Latitude && selectedPhoto.exif.Longitude && (
-                    <div className="h-[200px] mb-4 rounded-lg overflow-hidden">
-                      <AMapContainer
-                        center={[selectedPhoto.exif.Latitude, selectedPhoto.exif.Longitude]}
-                        zoom={15}
-                        marker={true}
-                        location={selectedPhoto.exif.Location || album.title}
+                <div className="relative">
+                  {/* 关闭按钮 - 调整位置到左上角 */}
+                  <button
+                    onClick={() => setSelectedPhoto(null)}
+                    className="absolute left-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white/75 hover:text-white transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+
+                  {/* 主要内容区域 */}
+                  <div className="flex flex-col lg:flex-row">
+                    {/* 左侧大图 */}
+                    <div className="relative lg:w-3/4 aspect-[4/3]">
+                      <Image
+                        src={selectedPhoto.url}
+                        alt={`${album.title} 照片`}
+                        fill
+                        className="object-contain"
+                        priority
                       />
                     </div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center text-gray-600">
-                        <MapPin size={18} className="mr-2" />
-                        <span>{selectedPhoto.exif.Location || album.location || '未知地点'}</span>
+
+                    {/* 右侧信息面板 */}
+                    <div className="lg:w-1/4 bg-white dark:bg-gray-900 p-6 overflow-y-auto max-h-[calc(100vh-2rem)]">
+                      {/* 标题和位置 */}
+                      <div className="mb-6">
+                        <h2 className="text-xl font-medium dark:text-white mb-2">{album.title}</h2>
+                        <div className="flex items-center text-gray-600 dark:text-gray-300">
+                          <MapPin weight="fill" size={18} className="mr-2" />
+                          <span className="text-sm">{selectedPhoto.exif.Location || album.location || '未知地点'}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center text-gray-600">
-                        <Calendar size={18} className="mr-2" />
-                        <span>{formatDate(selectedPhoto.exif.DateTime, 'full') || album.date}</span>
+
+                      {/* 地图 */}
+                      {selectedPhoto.exif.Latitude && selectedPhoto.exif.Longitude && (
+                        <div className="mb-6 rounded-lg overflow-hidden h-48">
+                          <AMapContainer
+                            center={[selectedPhoto.exif.Latitude, selectedPhoto.exif.Longitude]}
+                            zoom={15}
+                            marker={true}
+                            location={selectedPhoto.exif.Location || album.title}
+                          />
+                        </div>
+                      )}
+                      {!selectedPhoto.exif.Latitude && !selectedPhoto.exif.Longitude && (
+                        <div className="h-48 w-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-500 mb-6 rounded-lg">
+                          <MapPin size={24} className="mr-2" />
+                          <span>该照片没有位置信息</span>
+                        </div>
+                      )}
+
+                      {/* 拍摄信息 */}
+                      <div className="space-y-6">
+                        {/* 基本信息 */}
+                        <div className="space-y-3">
+                          <div className="flex items-center text-gray-600 dark:text-gray-300">
+                            <Calendar weight="fill" size={18} className="mr-2" />
+                            <span className="text-sm">{formatDate(selectedPhoto.exif.DateTime, 'full') || album.date}</span>
+                          </div>
+                          <div className="flex items-center text-gray-600 dark:text-gray-300">
+                            <Camera weight="fill" size={18} className="mr-2" />
+                            <span className="text-sm">{selectedPhoto.exif.CameraModel || '未知相机'}</span>
+                          </div>
+                        </div>
+
+                        {/* EXIF 信息 */}
+                        {(selectedPhoto.exif.FNumber || selectedPhoto.exif.ISO || selectedPhoto.exif.FocalLength || selectedPhoto.exif.ExposureTime) && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                              拍摄参数
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div className="space-y-2">
+                                {selectedPhoto.exif.FNumber && (
+                                  <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                    <span>光圈</span>
+                                    <span className="font-mono">ƒ/{selectedPhoto.exif.FNumber}</span>
+                                  </div>
+                                )}
+                                {selectedPhoto.exif.ExposureTime && (
+                                  <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                    <span>快门速度</span>
+                                    <span className="font-mono">{selectedPhoto.exif.ExposureTime}s</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                {selectedPhoto.exif.ISO && (
+                                  <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                    <span>ISO</span>
+                                    <span className="font-mono">{selectedPhoto.exif.ISO}</span>
+                                  </div>
+                                )}
+                                {selectedPhoto.exif.FocalLength && (
+                                  <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                    <span>焦距</span>
+                                    <span className="font-mono">{selectedPhoto.exif.FocalLength}mm</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 镜头信息 */}
+                        {selectedPhoto.exif.LensModel && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <div className="flex items-center text-gray-600 dark:text-gray-300">
+                              <Camera weight="fill" size={16} className="mr-2" />
+                              <span className="text-sm">{selectedPhoto.exif.LensModel}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center text-gray-600">
-                        <Camera size={18} className="mr-2" />
-                        <span>{selectedPhoto.exif.CameraModel || '未知相机'}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 text-sm text-gray-600">
-                      {selectedPhoto.exif.FNumber && <p>光圈: f/{selectedPhoto.exif.FNumber}</p>}
-                      {selectedPhoto.exif.ISO && <p>ISO: {selectedPhoto.exif.ISO}</p>}
-                      {selectedPhoto.exif.FocalLength && <p>焦距: {selectedPhoto.exif.FocalLength}mm</p>}
-                      {selectedPhoto.exif.ExposureTime && <p>快门速度: {selectedPhoto.exif.ExposureTime}s</p>}
-                      {selectedPhoto.exif.LensModel && <p>镜头: {selectedPhoto.exif.LensModel}</p>}
                     </div>
                   </div>
                 </div>
               )}
-            </div>
-          </Dialog.Panel>
+            </Dialog.Panel>
+          </div>
         </div>
       </Dialog>
     </div>

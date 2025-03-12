@@ -42,7 +42,7 @@ export default function Navigation() {
               href="/" 
               className="text-xl font-bold tracking-tighter dark:text-white"
             >
-              影忆
+              Momentography
             </Link>
           </div>
           
