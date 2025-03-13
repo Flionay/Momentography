@@ -1,32 +1,37 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextRequest, NextResponse } from 'next/server';
+import { updateImageLikes } from '@/app/utils/dbUtils';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { photoId, likes } = await request.json();
+    const body = await request.json();
+    const { photoId, likes } = body;
     
-    // 点赞数据文件路径
-    const dataFilePath = path.join(process.cwd(), 'public', 'data', 'likes.json');
-    
-    // 读取现有数据
-    let likesData = {};
-    try {
-      if (fs.existsSync(dataFilePath)) {
-        const fileContent = fs.readFileSync(dataFilePath, 'utf8');
-        likesData = JSON.parse(fileContent);
-      }
-    } catch (error) {
-      console.error('读取点赞数据失败:', error);
+    if (!photoId || typeof likes !== 'number' || likes < 0) {
+      return NextResponse.json(
+        { success: false, message: '无效的参数' },
+        { status: 400 }
+      );
     }
-    // 更新数据
-    likesData = { ...likesData, [photoId]: likes };
     
-    // 写入文件
-    fs.writeFileSync(dataFilePath, JSON.stringify(likesData, null, 2));
-    return NextResponse.json({ success: true });
+    // 更新数据库中的点赞数
+    const success = updateImageLikes(photoId, likes);
+    
+    if (success) {
+      return NextResponse.json({
+        success: true,
+        message: '点赞数更新成功'
+      });
+    } else {
+      return NextResponse.json(
+        { success: false, message: '照片不存在或更新失败' },
+        { status: 404 }
+      );
+    }
   } catch (error) {
-    console.error('保存点赞数据失败:', error);
-    return NextResponse.json({ success: false, error: 'Failed to save like data' }, { status: 500 });
+    console.error('更新点赞数失败:', error);
+    return NextResponse.json(
+      { success: false, message: '服务器错误' },
+      { status: 500 }
+    );
   }
 } 

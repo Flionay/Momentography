@@ -59,11 +59,6 @@ export default function AlbumPage() {
       try {
         setIsLoading(true);
         
-        // 获取相册数据
-        const albumsResp = await fetch('/data/albums.json');
-        if (!albumsResp.ok) throw new Error('无法加载相册数据');
-        const albumsData: AlbumData = await albumsResp.json();
-        
         // 处理URL编码的ID
         let albumId = Array.isArray(params.id) ? params.id[0] : params.id;
         
@@ -82,17 +77,20 @@ export default function AlbumPage() {
         }
         
         console.log('解码后的相册ID:', albumId);
-        console.log('可用相册:', Object.keys(albumsData));
         
-        // 检查相册是否存在
-        if (!albumsData[albumId]) {
-          console.error(`相册 ${albumId} 不存在`, Object.keys(albumsData));
-          setError(`相册 "${albumId}" 不存在`);
+        // 获取相册数据
+        const albumsResp = await fetch(`/api/data/albums/${encodeURIComponent(albumId)}`);
+        if (!albumsResp.ok) {
+          if (albumsResp.status === 404) {
+            setError(`相册 "${albumId}" 不存在`);
+          } else {
+            throw new Error('无法加载相册数据');
+          }
           setIsLoading(false);
           return;
         }
         
-        const albumData = albumsData[albumId];
+        const albumData = await albumsResp.json();
         
         // 解析坐标
         const locationStr = albumData.location || '';
@@ -114,7 +112,7 @@ export default function AlbumPage() {
         setAlbum(albumWithId);
         
         // 获取EXIF数据
-        const exifResp = await fetch('/data/exif_data.json');
+        const exifResp = await fetch('/api/data/exif');
         if (!exifResp.ok) throw new Error('无法加载EXIF数据');
         const exifData = await exifResp.json();
         

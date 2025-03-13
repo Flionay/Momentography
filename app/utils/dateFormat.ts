@@ -11,7 +11,9 @@ export function parseExifDate(exifDate: string | null | undefined): Date | null 
     const standardDate = date.replace(/:/g, '-'); // 2021:07:10 -> 2021-07-10
     const standardDateTime = `${standardDate}T${time}`; // 2021-07-10T09:20:23
     
+    // 创建日期对象，并确保它被解释为北京时间
     const parsedDate = new Date(standardDateTime);
+    
     return isNaN(parsedDate.getTime()) ? null : parsedDate;
   } catch (error) {
     console.error('EXIF日期解析错误:', error);
@@ -48,14 +50,17 @@ export function formatDate(
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Asia/Shanghai'
       },
       yearMonth: {
         year: 'numeric',
-        month: 'long'
+        month: 'long',
+        timeZone: 'Asia/Shanghai'
       },
       year: {
-        year: 'numeric'
+        year: 'numeric',
+        timeZone: 'Asia/Shanghai'
       }
     }[format];
 
@@ -76,8 +81,12 @@ export function getRelativeTimeString(date: Date | string | null | undefined): s
   if (!dateObj) return '未知时间';
 
   const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
+  
+  // 获取北京时间的当前时间
   const now = new Date();
-  const diff = dateObj.getTime() - now.getTime();
+  const beijingNow = new Date(now.getTime());
+  
+  const diff = dateObj.getTime() - beijingNow.getTime();
   const diffDays = Math.round(diff / (1000 * 60 * 60 * 24));
   const diffMonths = Math.round(diff / (1000 * 60 * 60 * 24 * 30));
   const diffYears = Math.round(diff / (1000 * 60 * 60 * 24 * 365));

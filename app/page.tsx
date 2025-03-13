@@ -31,38 +31,64 @@ export default function Home() {
   useEffect(() => {
     async function loadFeaturedPhotos() {
       try {
-        const albumsResp = await fetch('/data/albums.json');
+        const albumsResp = await fetch('/api/data/albums');
         const albumsData = await albumsResp.json();
         
-        const exifResp = await fetch('/data/exif_data.json');
+        const exifResp = await fetch('/api/data/exif');
         const exifData = await exifResp.json();
 
         // 调试：打印原始数据数量
-        // console.log('原始EXIF数据条数:', Object.keys(exifData).length);
+        console.log('原始EXIF数据条数:', Object.keys(exifData).length);
+        console.log('原始相册数据条数:', Object.keys(albumsData).length);
         
         // 1. 处理所有照片数据，更细致地处理位置信息
         const allPhotos = Object.entries(exifData)
           .map(([path, data]: [string, any]) => {
             const albumName = path.split('/')[0];
-            const fileName = path.split('/')[1].split('.')[0];
+            const fileName = path.split('/')[1]?.split('.')[0];
+            
+            if (!albumName || !fileName) {
+              console.log('无效的路径格式:', path);
+              return null;
+            }
+            
             const album = albumsData[albumName];
-            const photoUrl = album?.images.find((url: string) => url.includes(fileName));
+            if (!album) {
+              console.log('未找到相册:', albumName);
+              return null;
+            }
+            
+            const photoUrl = album?.images?.find((url: string) => url.includes(fileName));
+            if (!photoUrl) {
+              console.log('未找到图片URL:', fileName);
+              return null;
+            }
+            
             const parsedDate = parseExifDate(data.DateTime);
 
             // 提取省份名称
             let province = '';
             if (data.Location) {
               const locationParts = data.Location.split(/[,，]/);
-              const firstPart = locationParts[0].trim();
-              province = firstPart.replace(/([省市区特别行政区]|自治区)$/, '');
+              const firstPart = locationParts[0]?.trim();
+              if (firstPart) {
+                province = firstPart.replace(/([省市区特别行政区]|自治区)$/, '');
+              }
+            }
+            
+            // 如果没有省份信息，使用相册名称
+            if (!province && albumName) {
+              province = albumName;
             }
             
             // 过滤掉没有省份信息或省份为"未知"的照片
-            if (!province || !photoUrl || province === '未知') return null;
+            if (!province || !photoUrl || province === '未知') {
+              return null;
+            }
             
             return {
               url: photoUrl,
-              title: albumsData[albumName]?.title,
+              title: album.title,
               location: data.Location,
               date: data.DateTime,
               parsedDate,
@@ -92,9 +118,9 @@ export default function Home() {
         }, {});
 
         // 调试：打印每个省份的照片数量
-        // Object.entries(photosByProvince).forEach(([province, photos]) => {
-        //   console.log(`${province}: ${photos.length}张照片`);
-        // });
+        Object.entries(photosByProvince).forEach(([province, photos]) => {
+          console.log(`${province}: ${photos.length}张照片`);
+        });
 
         // 3. 从每个省份选择评分最高的照片
         const selectedPhotos = Object.entries(photosByProvince)
@@ -109,7 +135,7 @@ export default function Home() {
             // 调试：打印每个省份选中的照片信息
             console.log(`${province}最高评分照片:`, {
               star: bestPhoto.star,
-              location: bestPhoto.rawLocation,
+              location: bestPhoto.location,
               date: bestPhoto.date,
               url: bestPhoto.url
             });
@@ -123,8 +149,8 @@ export default function Home() {
           });
 
         // 调试：打印最终选择的照片数量
-        // console.log('最终选择的照片数量:', selectedPhotos.length);
-        // console.log('最终选择的省份:', selectedPhotos.map(p => p.province).join(', '));
+        console.log('最终选择的照片数量:', selectedPhotos.length);
+        console.log('最终选择的省份:', selectedPhotos.map(p => p.province).join(', '));
 
         // 不限制数量，显示所有省份的照片
         setFeaturedPhotos(selectedPhotos);

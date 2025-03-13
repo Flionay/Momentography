@@ -6,11 +6,7 @@ import { motion } from 'framer-motion';
 import { Camera, MapPin, Calendar, Star, Heart, X } from '@phosphor-icons/react';
 import { Dialog } from '@headlessui/react';
 import { formatDate, parseExifDate } from '@/app/utils/dateFormat';
-// 删除 react-leaflet 导入
-// import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-// 移除直接导入
-// import L from 'leaflet';
 import AMapContainer from '@/app/components/AMapContainer';
 import { MAP_CONFIG } from '@/app/config/map';
 
@@ -34,20 +30,25 @@ interface Photo {
   title: string;
   location: string;
   date: string;
-  parsedDate: Date;
+  parsedDate: Date | null;
   cameraModel: string;
   star: number;
   likes: number;
+  album_id: string;
+  album_title: string;
   coordinates?: [number, number];
-  exif: {
-    [key: string]: string | number | null;
+  exif?: {
+    camera_model: string;
+    lens_model: string;
+    f_number: number;
+    exposure_time: string;
+    iso: number;
+    focal_length: string;
+    location: string;
+    date_time: string;
+    raw?: any;
   };
 }
-
-// 中国地图的默认中心点和缩放级别
-const CHINA_CENTER: [number, number] = [35.8617, 104.1954];
-const DEFAULT_ZOOM = 4;
-
 
 // 坐标转换函数 - WGS84 转 GCJ02
 const transformCoordinates = (coordinates: [number, number]): [number, number] => {
@@ -68,9 +69,9 @@ const transformCoordinates = (coordinates: [number, number]): [number, number] =
 // 解析GPS坐标的函数
 const parseGPSCoordinates = (exifData: any): [number, number] | null => {
   try {
-    if (exifData.Latitude && exifData.Longitude) {
-      const lat = exifData.Latitude;
-      const lon = exifData.Longitude;
+    if (exifData && exifData.raw && exifData.raw.Latitude && exifData.raw.Longitude) {
+      const lat = exifData.raw.Latitude;
+      const lon = exifData.raw.Longitude;
       
       // 确保坐标是有效的数字
       if (typeof lat === 'number' && typeof lon === 'number' && 
@@ -100,75 +101,49 @@ export default function BrowsePage() {
   useEffect(() => {
     async function loadPhotos() {
       try {
-        const albumsResp = await fetch('/data/albums.json');
-        const albumsData = await albumsResp.json();
+        setIsLoading(true);
         
-        const exifResp = await fetch('/data/exif_data.json');
-        const exifData = await exifResp.json();
+        // 从 API 获取照片数据
+        const response = await fetch('/api/photos/list?withExif=true');
         
-        // 加载点赞数据
-        let likesData: Record<string, number> = {};
-        try {
-          const likesResp = await fetch('/data/likes.json');
-          likesData = await likesResp.json() as Record<string, number>;
-        } catch (error) {
-          console.error('加载点赞数据失败:', error);
+        if (!response.ok) {
+          throw new Error('获取照片数据失败');
         }
         
-        let processedPhotos = Object.entries(exifData)
-          .map(([path, data]: [string, any]) => {
-            const albumName = path.split('/')[0];
-            const fileName = path.split('/')[1].split('.')[0];
-            const album = albumsData[albumName];
-            const photoUrl = album?.images.find((url: string) => url.includes(fileName));
-            
-            // 解析日期
-            const dateObj = parseExifDate(data.DateTime);
-            
-            // 处理点赞数
-            const photoLikes = path in likesData ? likesData[path] : Math.floor(Math.random() * 51) + 50;
-            
-            // 解析GPS坐标
-            const coordinates = parseGPSCoordinates(data);
-            
-            return {
-              id: path,
-              url: photoUrl || '',
-              title: albumsData[albumName]?.title || '',
-              location: data.Location || '',
-              date: data.DateTime || '',
-              parsedDate: dateObj,
-              cameraModel: data.CameraModel || '',
-              star: data.star || 0,
-              likes: photoLikes,
-              coordinates,
-              exif: {
-                FNumber: data.FNumber,
-                ISO: data.ISO,
-                FocalLength: data.FocalLength,
-                ExposureTime: data.ExposureTime,
-                LensModel: data.LensModel,
-              }
-            };
-          })
-          .filter(photo => photo.url !== '');
-
+        const data = await response.json();
+        
+        // 处理照片数据
+        const processedPhotos = data.photos.map((photo: any) => {
+          // 解析日期
+          const parsedDate = photo.date ? parseExifDate(photo.date) : null;
+          
+          // 解析 GPS 坐标
+          const coordinates = photo.exif ? parseGPSCoordinates(photo.exif) : null;
+          
+          return {
+            id: photo.id,
+            url: photo.url,
+            title: photo.title || photo.album_title || '',
+            location: photo.location || '',
+            date: photo.date || '',
+            parsedDate,
+            cameraModel: photo.exif?.camera_model || '',
+            star: photo.star || 0,
+            likes: photo.likes || 0,
+            album_id: photo.album_id,
+            album_title: photo.album_title || '',
+            coordinates,
+            exif: photo.exif
+          };
+        });
+        
         // 提取所有相机型号和地点
-        const uniqueCameras = [...new Set(processedPhotos.map(p => p.cameraModel))];
-        const uniqueLocations = [...new Set(processedPhotos.map(p => p.location))];
+        const uniqueCameras = [...new Set(processedPhotos.map((p: Photo) => p.cameraModel).filter(Boolean))] as string[];
+        const uniqueLocations = [...new Set(processedPhotos.map((p: Photo) => p.location).filter(Boolean))] as string[];
         
         setCameras(uniqueCameras);
         setLocations(uniqueLocations);
-
-        // 按日期排序（从新到旧）
-        processedPhotos.sort((a, b) => {
-          if (!a.parsedDate && !b.parsedDate) return 0;
-          if (!a.parsedDate) return 1;
-          if (!b.parsedDate) return -1;
-          return b.parsedDate.getTime() - a.parsedDate.getTime();
-        });
-
-        setPhotos(processedPhotos as Photo[]);
+        setPhotos(processedPhotos);
       } catch (error) {
         console.error('加载照片时出错:', error);
       } finally {
@@ -187,9 +162,11 @@ export default function BrowsePage() {
     )
     .sort((a, b) => {
       if (sortBy === 'date') {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
+        const dateA = a.parsedDate ? a.parsedDate.getTime() : 0;
+        const dateB = b.parsedDate ? b.parsedDate.getTime() : 0;
+        return dateB - dateA; // 从新到旧
       }
-      return b.star - a.star;
+      return b.star - a.star; // 星级从高到低
     });
 
   const containerVariants = {
@@ -207,29 +184,6 @@ export default function BrowsePage() {
       opacity: 1,
       transition: { duration: 0.5 }
     }
-  };
-
-  // 排序函数
-  const sortPhotos = (sortType: string) => {
-    const sortedPhotos = [...photos];
-    
-    switch (sortType) {
-      case 'date':
-        sortedPhotos.sort((a, b) => {
-          if (!a.parsedDate && !b.parsedDate) return 0;
-          if (!a.parsedDate) return 1;
-          if (!b.parsedDate) return -1;
-          return b.parsedDate.getTime() - a.parsedDate.getTime();
-        });
-        break;
-      case 'rating':
-        sortedPhotos.sort((a, b) => (b.star || 0) - (a.star || 0));
-        break;
-      // ... 其他排序方式 ...
-    }
-    
-    setPhotos(sortedPhotos);
-    setSortBy(sortType as 'date' | 'star');
   };
 
   // 处理点赞功能
@@ -272,7 +226,7 @@ export default function BrowsePage() {
       <div className="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <select
           value={sortBy}
-          onChange={(e) => sortPhotos(e.target.value)}
+          onChange={(e) => setSortBy(e.target.value as 'date' | 'star')}
           className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm 
             dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
         >
@@ -497,41 +451,45 @@ export default function BrowsePage() {
                         </div>
 
                         {/* EXIF 信息 */}
-                        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-                            拍摄参数
-                          </h3>
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
-                                <span>光圈</span>
-                                <span className="font-mono">ƒ/{selectedPhoto.exif.FNumber}</span>
+                        {selectedPhoto.exif && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                              拍摄参数
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                  <span>光圈</span>
+                                  <span className="font-mono">ƒ/{selectedPhoto.exif.f_number}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                  <span>快门速度</span>
+                                  <span className="font-mono">{selectedPhoto.exif.exposure_time}s</span>
+                                </div>
                               </div>
-                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
-                                <span>快门速度</span>
-                                <span className="font-mono">{selectedPhoto.exif.ExposureTime}s</span>
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
-                                <span>ISO</span>
-                                <span className="font-mono">{selectedPhoto.exif.ISO}</span>
-                              </div>
-                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
-                                <span>焦距</span>
-                                <span className="font-mono">{selectedPhoto.exif.FocalLength}mm</span>
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                  <span>ISO</span>
+                                  <span className="font-mono">{selectedPhoto.exif.iso}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                  <span>焦距</span>
+                                  <span className="font-mono">{selectedPhoto.exif.focal_length}mm</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* 镜头信息 */}
-                        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                          <div className="flex items-center text-gray-600 dark:text-gray-300">
-                            <Camera weight="fill" size={16} className="mr-2" />
-                            <span className="text-sm">{selectedPhoto.exif.LensModel}</span>
+                        {selectedPhoto.exif && selectedPhoto.exif.lens_model && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <div className="flex items-center text-gray-600 dark:text-gray-300">
+                              <Camera weight="fill" size={16} className="mr-2" />
+                              <span className="text-sm">{selectedPhoto.exif.lens_model}</span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </div>

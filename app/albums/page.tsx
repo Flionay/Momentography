@@ -25,13 +25,19 @@ export default function AlbumsPage() {
   useEffect(() => {
     async function loadAlbums() {
       try {
-        const response = await fetch('/data/albums.json');
+        const response = await fetch('/api/data/albums');
         const data = await response.json();
         
-        const processedAlbums = Object.entries(data).map(([id, album]: [string, any]) => ({
-          id,
-          ...album,
-        }));
+        const processedAlbums = Object.entries(data).map(([id, album]: [string, any]) => {
+          // 确保每个相册至少有一张图片作为封面
+          const images = album.images && album.images.length > 0 ? album.images : [];
+          
+          return {
+            id,
+            ...album,
+            images
+          };
+        }).filter(album => album.images.length > 0); // 过滤掉没有图片的相册
         
         setAlbums(processedAlbums);
       } catch (error) {

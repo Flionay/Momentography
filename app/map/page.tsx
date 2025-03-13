@@ -368,41 +368,17 @@ export default function MapPage() {
   useEffect(() => {
     async function loadPhotos() {
       try {
-        const albumsResp = await fetch('/data/albums.json');
-        const albumsData = await albumsResp.json();
+        // 使用新的API路由获取地图数据
+        const response = await fetch('/api/data/map');
+        if (!response.ok) {
+          throw new Error(`获取地图数据失败: ${response.status} ${response.statusText}`);
+        }
         
-        const exifResp = await fetch('/data/exif_data.json');
-        const exifData = await exifResp.json();
+        const mapData = await response.json();
+        console.log(`获取到 ${mapData.length} 张带地理位置的照片`);
         
-        const processedPhotos = Object.entries(exifData)
-          .filter(([_, data]: [string, any]) => data.Latitude && data.Longitude)
-          .map(([path, data]: [string, any]) => {
-            const albumName = path.split('/')[0];
-            const fileName = path.split('/')[1].split('.')[0];
-            const album = albumsData[albumName];
-            const photoUrl = album?.images.find((url: string) => url.includes(fileName));
-            
-            return {
-              id: path,
-              url: photoUrl || '',
-              title: albumsData[albumName]?.title || '未知相册',
-              location: data.Location || '未知地点',
-              latitude: data.Latitude,
-              longitude: data.Longitude,
-              date: data.DateTime || '未知时间',
-              cameraModel: data.CameraModel || '未知相机',
-              exif: {
-                FNumber: data.FNumber,
-                ISO: data.ISO,
-                FocalLength: data.FocalLength,
-                ExposureTime: data.ExposureTime,
-                LensModel: data.LensModel,
-              }
-            };
-          })
-          .filter((photo: Photo) => photo.url); // 过滤掉没有URL的照片
-        
-        setPhotos(processedPhotos);
+        // 直接使用API返回的数据
+        setPhotos(mapData);
       } catch (error) {
         console.error('加载照片数据时出错:', error);
       } finally {
