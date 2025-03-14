@@ -386,7 +386,7 @@ export default function Home() {
                         transition={{ duration: 0.5, delay: Math.min(index * 0.05, 0.5) }}
                       >
                         {/* 移除中间的点，改为优雅的线条装饰 */}
-                        <div className="absolute left-1/2 top-1/2 w-px h-16 bg-gradient-to-b from-gray-300 to-transparent -translate-x-1/2 -translate-y-1/2 z-10" />
+                        {/* <div className="absolute left-1/2 top-1/2 w-px h-16 bg-gradient-to-b from-gray-300 to-transparent -translate-x-1/2 -translate-y-1/2 z-10" /> */}
                         
                         {/* 照片容器 - 交替上下位置 */}
                         <div className={`relative ${index % 2 === 0 ? 'mb-32 mt-8' : 'mt-32 mb-8'}`}>

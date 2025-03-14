@@ -254,11 +254,11 @@ export async function updateAlbumsJsonData() {
         try {
           // 读取 YAML 文件
           const yamlResult = await client.get(key, {
-            timeout: 20000 // 增加到20秒超时
+            timeout: 20000
           });
           
           // 解析 YAML 内容
-          const albumInfo = yaml.load(yamlResult.content.toString());
+          const albumInfo = yaml.load(yamlResult.content.toString()) as Record<string, any>;
           
           // 获取相册名称
           const parts = key.split('/');
@@ -274,6 +274,11 @@ export async function updateAlbumsJsonData() {
           
           // 更新相册信息
           Object.assign(albums[albumName], albumInfo);
+          
+          // 如果存在desc字段但没有description字段，将desc映射到description
+          if (albumInfo.desc && !albumInfo.description) {
+            albums[albumName].description = albumInfo.desc;
+          }
         } catch (yamlError) {
           console.error(`读取 YAML 文件 ${key} 失败:`, yamlError);
         }
@@ -291,6 +296,15 @@ export async function updateAlbumsJsonData() {
     } else {
       // 转换相册信息中的日期
       const processedAlbums = convertDates(albums);
+      
+      // 处理desc字段，将其映射到description字段
+      for (const albumId in processedAlbums) {
+        const album = processedAlbums[albumId];
+        if (album.desc && !album.description) {
+          album.description = album.desc;
+          console.log(`相册 ${albumId} 的desc字段已映射到description字段`);
+        }
+      }
       
       // 将信息保存到数据库
       const saveResult = saveAlbums(processedAlbums);
