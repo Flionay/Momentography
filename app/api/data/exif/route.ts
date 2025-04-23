@@ -38,8 +38,6 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('获取EXIF数据失败:', error);
-    
     const errorResponse = NextResponse.json(
       { error: '获取EXIF数据失败', message: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

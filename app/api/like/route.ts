@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('更新点赞数失败:', error);
     return NextResponse.json(
       { success: false, message: '服务器错误' },
       { status: 500 }

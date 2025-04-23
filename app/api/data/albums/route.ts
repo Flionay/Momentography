@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAlbums, getAlbumWithImages } from '@/app/utils/dbUtils';
 
+// 定义相册的接口类型
+interface Album {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  date: string;
+}
+
 export async function GET(request: NextRequest) {
   try {
     // 从数据库获取所有相册
-    const albums = getAlbums();
+    const albums = getAlbums() as Album[];
     
     // 转换为前端需要的格式（与原来的JSON格式兼容）
     const albumsData: Record<string, any> = {};
@@ -35,8 +44,6 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('获取相册数据失败:', error);
-    
     const errorResponse = NextResponse.json(
       { error: '获取相册数据失败', message: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -34,10 +34,13 @@
     "@tailwindcss/postcss": "^4",
     "@types/ali-oss": "^6.16.11",
     "@types/better-sqlite3": "^7.6.12",
-    "@types/leaflet": "^1.9.16",
+    "@types/leaflet": "^1.9.17",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "css-loader": "^7.1.2",
+    "file-loader": "^6.2.0",
+    "style-loader": "^4.0.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

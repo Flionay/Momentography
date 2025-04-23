@@ -41,7 +41,7 @@ export default function AlbumsPage() {
         
         setAlbums(processedAlbums);
       } catch (error) {
-        console.error('加载相册时出错:', error);
+        setIsLoading(false);
       } finally {
         setIsLoading(false);
       }

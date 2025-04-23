@@ -73,10 +73,8 @@ export default function AlbumPage() {
         try {
           albumId = decodeURIComponent(albumId);
         } catch (e) {
-          console.error('解码相册ID失败:', e);
+          // 忽略解码错误
         }
-        
-        console.log('解码后的相册ID:', albumId);
         
         // 获取相册数据
         const albumsResp = await fetch(`/api/data/albums/${encodeURIComponent(albumId)}`);
@@ -139,7 +137,6 @@ export default function AlbumPage() {
         
         setPhotos(processedPhotos);
       } catch (error) {
-        console.error('加载相册数据时出错:', error);
         setError('加载相册数据时出错');
       } finally {
         setIsLoading(false);

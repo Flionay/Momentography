@@ -46,17 +46,6 @@ export default function AMapContainer({ center, zoom, marker = true, location }:
     if (!mapRef.current) return;
 
     try {
-      console.log('初始化地图，中心点:', center, '缩放级别:', zoom);
-
-      // 确保 center 是有效的坐标
-      if (!center || !Array.isArray(center) || center.length !== 2 || 
-          typeof center[0] !== 'number' || typeof center[1] !== 'number' ||
-          isNaN(center[0]) || isNaN(center[1])) {
-        console.error('无效的地图中心点:', center);
-        setError('无效的地图坐标');
-        return;
-      }
-
       // 创建地图实例
       const map = L.map(mapRef.current, {
         center,
@@ -131,7 +120,6 @@ export default function AMapContainer({ center, zoom, marker = true, location }:
         }
       };
     } catch (err) {
-      console.error('地图初始化错误:', err);
       setError('地图加载失败');
     }
   }, [center, zoom, marker, location, isDarkMode]);

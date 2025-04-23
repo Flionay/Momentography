@@ -37,10 +37,6 @@ export default function Home() {
         const exifResp = await fetch('/api/data/exif');
         const exifData = await exifResp.json();
 
-        // 调试：打印原始数据数量
-        console.log('原始EXIF数据条数:', Object.keys(exifData).length);
-        console.log('原始相册数据条数:', Object.keys(albumsData).length);
-        
         // 1. 处理所有照片数据，更细致地处理位置信息
         const allPhotos = Object.entries(exifData)
           .map(([path, data]: [string, any]) => {
@@ -48,19 +44,16 @@ export default function Home() {
             const fileName = path.split('/')[1]?.split('.')[0];
             
             if (!albumName || !fileName) {
-              console.log('无效的路径格式:', path);
               return null;
             }
             
             const album = albumsData[albumName];
             if (!album) {
-              console.log('未找到相册:', albumName);
               return null;
             }
             
             const photoUrl = album?.images?.find((url: string) => url.includes(fileName));
             if (!photoUrl) {
-              console.log('未找到图片URL:', fileName);
               return null;
             }
             
@@ -103,9 +96,6 @@ export default function Home() {
             return true;
           });
 
-        // 调试：打印处理后的照片数量
-        console.log('处理后的照片数量:', allPhotos.length);
-        
         // 2. 按省份分组
         const photosByProvince = allPhotos.reduce((acc: { [key: string]: Photo[] }, photo) => {
           if (photo && !acc[photo.province]) {
@@ -117,11 +107,6 @@ export default function Home() {
           return acc;
         }, {});
 
-        // 调试：打印每个省份的照片数量
-        Object.entries(photosByProvince).forEach(([province, photos]) => {
-          console.log(`${province}: ${photos.length}张照片`);
-        });
-
         // 3. 从每个省份选择评分最高的照片
         const selectedPhotos = Object.entries(photosByProvince)
           .map(([province, provincePhotos]) => {
@@ -132,14 +117,6 @@ export default function Home() {
               return currentStar > bestStar ? current : best;
             });
 
-            // 调试：打印每个省份选中的照片信息
-            console.log(`${province}最高评分照片:`, {
-              star: bestPhoto.star,
-              location: bestPhoto.location,
-              date: bestPhoto.date,
-              url: bestPhoto.url
-            });
-
             return bestPhoto;
           })
           // 4. 按时间从远到近排序
@@ -147,10 +124,6 @@ export default function Home() {
             if (!a.parsedDate || !b.parsedDate) return 0;
             return a.parsedDate.getTime() - b.parsedDate.getTime();
           });
-
-        // 调试：打印最终选择的照片数量
-        console.log('最终选择的照片数量:', selectedPhotos.length);
-        console.log('最终选择的省份:', selectedPhotos.map(p => p.province).join(', '));
 
         // 不限制数量，显示所有省份的照片
         setFeaturedPhotos(selectedPhotos);
@@ -163,7 +136,7 @@ export default function Home() {
         }, 50);
 
       } catch (error) {
-        console.error('加载精选照片时出错:', error);
+        setError('加载精选照片时出错');
       } finally {
         setIsLoading(false);
       }

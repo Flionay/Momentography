@@ -5,18 +5,15 @@ export async function POST(request: Request) {
   
   // 这里使用一个简单的密码验证，实际应用中应该使用更安全的方式
   if (password === process.env.ADMIN_PASSWORD) {
-    // 修复：await cookies 操作
-    const cookieStore = cookies();
-    await cookieStore.set('admin-auth', 'true', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 // 24 小时
-    });
-    
-    return new Response(JSON.stringify({ success: true }), {
+    // 创建一个新的响应对象，并在响应中设置cookie
+    const response = new Response(JSON.stringify({ success: true }), {
       status: 200,
     });
+    
+    // 设置cookie
+    response.headers.append('Set-Cookie', `admin-auth=true; HttpOnly; Path=/; SameSite=Strict; Max-Age=${60 * 60 * 24}; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''}`);
+    
+    return response;
   }
   
   return new Response(JSON.stringify({ error: 'Invalid password' }), {

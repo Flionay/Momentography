@@ -41,8 +41,6 @@ export default function PhotoCard({ photo, isAdmin, onStarUpdate }: PhotoCardPro
         setStars(newStars);
         onStarUpdate?.(newStars);
       }
-    } catch (error) {
-      console.error('更新星级失败:', error);
     } finally {
       setIsUpdating(false);
     }

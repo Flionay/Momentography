@@ -3,9 +3,10 @@ import { getAlbumWithImages } from '@/app/utils/dbUtils';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  segmentData: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await segmentData.params;
     const albumId = params.id;
     
     // 从数据库获取相册详情
@@ -39,8 +40,6 @@ export async function GET(
     
     return response;
   } catch (error) {
-    console.error('获取相册详情失败:', error);
-    
     const errorResponse = NextResponse.json(
       { error: '获取相册详情失败', message: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

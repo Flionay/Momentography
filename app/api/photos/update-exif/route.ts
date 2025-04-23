@@ -12,6 +12,8 @@ interface ExifData {
   location?: string | null;
   date_time?: string | null;
   raw_data?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export async function POST(request: Request) {
@@ -41,50 +43,37 @@ export async function POST(request: Request) {
       // 获取现有的EXIF数据
       const existingExif = db.prepare('SELECT * FROM exif_data WHERE image_id = ?').get(photoId) as ExifData | undefined || {};
       
-      // 准备要更新的数据
-      const {
-        camera_model = existingExif.camera_model,
-        lens_model = existingExif.lens_model,
-        f_number = existingExif.f_number,
-        exposure_time = existingExif.exposure_time,
-        iso = existingExif.iso,
-        focal_length = existingExif.focal_length,
-        location = existingExif.location,
-        date_time = existingExif.date_time
-      } = exifData;
+      // 合并现有数据和新数据
+      const updatedData = {
+        ...existingExif,
+        ...exifData,
+      };
       
       // 将完整数据序列化为JSON
-      const rawData = JSON.stringify({
-        CameraModel: camera_model,
-        LensModel: lens_model,
-        FNumber: f_number,
-        ExposureTime: exposure_time,
-        ISO: iso,
-        FocalLength: focal_length,
-        Location: location,
-        DateTime: date_time
-      });
+      const rawData = JSON.stringify(updatedData);
       
       // 更新EXIF数据
       const updateStmt = db.prepare(`
         INSERT OR REPLACE INTO exif_data (
           image_id, camera_model, lens_model, f_number, exposure_time, 
-          iso, focal_length, location, date_time, raw_data, updated_at
+          iso, focal_length, location, date_time, raw_data, latitude, longitude, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `);
       
       updateStmt.run(
         photoId,
-        camera_model,
-        lens_model,
-        f_number,
-        exposure_time,
-        iso,
-        focal_length,
-        location,
-        date_time,
-        rawData
+        exifData.camera_model || null,
+        exifData.lens_model || null,
+        exifData.f_number || null,
+        exifData.exposure_time || null,
+        exifData.iso || null,
+        exifData.focal_length || null,
+        exifData.location || null,
+        exifData.date_time || null,
+        rawData,
+        exifData.latitude || null,
+        exifData.longitude || null
       );
       
       // 记录更新操作
@@ -97,14 +86,12 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       db.close();
-      console.error('更新EXIF数据时出错:', error);
       return NextResponse.json({ 
         success: false, 
         message: `更新EXIF数据时出错: ${error instanceof Error ? error.message : String(error)}` 
       }, { status: 500 });
     }
   } catch (error) {
-    console.error('处理请求时出错:', error);
     return NextResponse.json({ 
       success: false, 
       message: `处理请求时出错: ${error instanceof Error ? error.message : String(error)}` 

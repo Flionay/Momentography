@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllImages } from '@/app/utils/dbUtils';
 
+// 定义EXIF数据的接口
+interface ExifData {
+  Latitude?: number;
+  Longitude?: number;
+  GPSLatitude?: number;
+  GPSLongitude?: number;
+  [key: string]: any; // 允许其他EXIF属性
+}
+
 export async function GET(request: NextRequest) {
   try {
     // 从数据库获取所有图片，包含EXIF数据
@@ -14,13 +23,12 @@ export async function GET(request: NextRequest) {
       }
       
       // 尝试解析原始EXIF数据
-      let rawExif = null;
+      let rawExif: ExifData | null = null;
       try {
         if (typeof image.exif.raw_data === 'string') {
-          rawExif = JSON.parse(image.exif.raw_data);
+          rawExif = JSON.parse(image.exif.raw_data) as ExifData;
         }
       } catch (e) {
-        console.error(`解析图片 ${image.id} 的EXIF数据失败:`, e);
         return false;
       }
       
@@ -30,25 +38,21 @@ export async function GET(request: NextRequest) {
         (rawExif.GPSLatitude !== undefined && rawExif.GPSLongitude !== undefined));
     });
     
-    console.log(`找到 ${geotaggedImages.length} 张带地理位置的图片，总共 ${images.length} 张图片`);
-    
     // 转换为前端需要的格式
     const mapData = geotaggedImages.map(image => {
       // 解析原始EXIF数据
-      let rawExif = {};
+      let rawExif: ExifData = {};
       try {
         if (image.exif?.raw_data && typeof image.exif.raw_data === 'string') {
-          rawExif = JSON.parse(image.exif.raw_data);
+          rawExif = JSON.parse(image.exif.raw_data) as ExifData;
         }
       } catch (e) {
-        console.error(`解析图片 ${image.id} 的EXIF数据失败:`, e);
+        // 解析失败时保持空对象
       }
       
       // 从原始EXIF数据中提取经纬度
       const latitude = rawExif.Latitude || rawExif.GPSLatitude || 0;
       const longitude = rawExif.Longitude || rawExif.GPSLongitude || 0;
-      
-      console.log(`图片 ${image.id} 的坐标: ${latitude}, ${longitude}`);
       
       return {
         id: image.id,
@@ -80,8 +84,6 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('获取地图数据失败:', error);
-    
     const errorResponse = NextResponse.json(
       { error: '获取地图数据失败', message: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

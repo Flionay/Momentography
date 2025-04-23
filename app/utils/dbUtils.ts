@@ -69,11 +69,30 @@ export function initDb() {
       location TEXT,
       date_time TEXT,
       raw_data TEXT,
+      latitude REAL,
+      longitude REAL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (image_id) REFERENCES images(id)
     )
   `);
+
+  // 检查 exif_data 表是否有经纬度字段，如果没有则添加
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(exif_data)").all();
+    const hasLatitude = tableInfo.some((column: any) => column.name === 'latitude');
+    const hasLongitude = tableInfo.some((column: any) => column.name === 'longitude');
+    
+    if (!hasLatitude) {
+      db.exec(`ALTER TABLE exif_data ADD COLUMN latitude REAL`);
+    }
+    
+    if (!hasLongitude) {
+      db.exec(`ALTER TABLE exif_data ADD COLUMN longitude REAL`);
+    }
+  } catch (error) {
+    console.error('检查或更新 exif_data 表结构时出错:', error);
+  }
 
   // 创建更新记录表
   db.exec(`
@@ -92,7 +111,6 @@ export function initDb() {
     const hasStatusCode = tableInfo.some((column: any) => column.name === 'status_code');
     
     if (!hasStatusCode) {
-      console.log('添加 status_code 字段到 updates 表');
       db.exec(`ALTER TABLE updates ADD COLUMN status_code TEXT`);
       
       // 更新现有记录的 status_code
@@ -111,7 +129,6 @@ export function initDb() {
   }
 
   db.close();
-  console.log('数据库初始化完成');
 }
 
 // 记录更新操作
@@ -126,13 +143,6 @@ export function logUpdate(type: string, status: string, message?: string, status
     else if (status === 'partial_success') statusCode = 'partial_success';
     else statusCode = 'info';
   }
-  
-  console.log(`记录更新: 类型=${type}, 状态=${status}, 状态码=${statusCode}, 消息=${message}`);
-  
-  try {
-    // 检查表是否有 status_code 字段
-    const tableInfo = db.prepare("PRAGMA table_info(updates)").all();
-    const hasStatusCode = tableInfo.some((column: any) => column.name === 'status_code');
     
     let stmt;
     if (hasStatusCode) {
@@ -151,11 +161,6 @@ export function logUpdate(type: string, status: string, message?: string, status
     
     db.close();
     return { success: true };
-  } catch (error) {
-    console.error('记录更新操作时出错:', error);
-    db.close();
-    return { success: false, error };
-  }
 }
 
 // 定义数据库记录的类型
@@ -197,6 +202,8 @@ interface ExifRecord {
   location: string | null;
   date_time: string | null;
   raw_data: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string;
   [key: string]: any;
@@ -222,8 +229,6 @@ interface DbQueryResult {
 export function getLastUpdate(type: string): UpdateRecord | null {
   const db = getDb();
   
-  console.log(`正在获取 ${type} 的最后更新记录...`);
-  
   // 先检查表中是否有记录
   const countStmt = db.prepare(`
     SELECT COUNT(*) as count FROM updates
@@ -231,10 +236,8 @@ export function getLastUpdate(type: string): UpdateRecord | null {
   `);
   
   const countResult = countStmt.get(type) as { count: number };
-  console.log(`${type} 类型的更新记录数量: ${countResult.count}`);
   
   if (countResult.count === 0) {
-    console.log(`没有找到 ${type} 类型的更新记录`);
     db.close();
     return null;
   }
@@ -248,18 +251,6 @@ export function getLastUpdate(type: string): UpdateRecord | null {
   `);
   
   const result = stmt.get(type) as UpdateRecord | null;
-  
-  if (result) {
-    console.log(`找到 ${type} 的最后更新记录:`, {
-      id: result.id,
-      status: result.status,
-      message: result.message,
-      created_at: result.created_at,
-      status_code: result.status_code
-    });
-  } else {
-    console.log(`没有找到 ${type} 的最后更新记录`);
-  }
   
   db.close();
   return result;
@@ -302,8 +293,6 @@ export function saveAlbums(albums: Record<string, any>) {
     
     // 处理每个相册
     for (const [albumId, albumData] of Object.entries(albums)) {
-      console.log(`处理相册: ${albumId}`);
-      
       // 获取现有相册信息
       const existingAlbum = getExistingAlbum.get(albumId) as AlbumRecord | null;
       
@@ -348,14 +337,12 @@ export function saveAlbums(albums: Record<string, any>) {
           }
           
           processedImages++;
-          console.log(`  添加/更新图片: ${imageId}`);
         }
       }
     }
     
     // 提交事务
     db.prepare('COMMIT').run();
-    console.log(`处理了 ${processedAlbums} 个相册，${processedImages} 张图片，跳过了 ${skippedImages} 张图片`);
     
     db.close();
     return { 
@@ -366,7 +353,6 @@ export function saveAlbums(albums: Record<string, any>) {
   } catch (error) {
     // 回滚事务
     db.prepare('ROLLBACK').run();
-    console.error('保存相册数据时出错:', error);
     
     db.close();
     return { 
@@ -383,151 +369,122 @@ export function saveExifData(exifData: Record<string, any>) {
   
   let processedCount = 0;
   let skippedCount = 0;
+  let insertedCount = 0;
+  let existingCount = 0;
   
   try {
-    // 检查 exifData 是否为有效对象
-    if (!exifData) {
-      console.error('EXIF 数据为空:', exifData);
+    // 基础验证检查
+    if (!exifData || typeof exifData !== 'object' || Array.isArray(exifData)) {
+      const errorMsg = !exifData ? 'EXIF 数据为空' : 
+                      Array.isArray(exifData) ? 'EXIF 数据是数组，应该是对象' :
+                      `EXIF 数据不是对象类型: ${typeof exifData}`;
       db.close();
-      return { 
-        success: false, 
-        message: `EXIF 数据为空`,
-        status: 'error'
-      };
+      return { success: false, message: errorMsg, status: 'error' };
     }
     
-    // 检查 exifData 是否为对象类型
-    if (typeof exifData !== 'object') {
-      console.error('EXIF 数据不是对象类型:', typeof exifData);
-      db.close();
-      return { 
-        success: false, 
-        message: `EXIF 数据不是对象类型: ${typeof exifData}`,
-        status: 'error'
-      };
-    }
-    
-    // 检查 exifData 是否为数组
-    if (Array.isArray(exifData)) {
-      console.error('EXIF 数据是数组，应该是对象:', exifData);
-      db.close();
-      return { 
-        success: false, 
-        message: `EXIF 数据是数组，应该是对象`,
-        status: 'error'
-      };
-    }
-    
-    // 检查是否有键值对
     const keys = Object.keys(exifData);
     if (keys.length === 0) {
-      console.warn('EXIF 数据为空对象');
       db.close();
-      return { 
-        success: true, 
-        message: `EXIF 数据为空，没有数据需要处理`,
-        status: 'warning'
-      };
+      return { success: true, message: 'EXIF 数据为空，没有数据需要处理', status: 'warning' };
     }
-    
-    console.log(`EXIF 数据包含 ${keys.length} 个键值对`);
     
     // 开始事务
     db.prepare('BEGIN TRANSACTION').run();
     
-    // 检查图片是否存在
+    // 准备语句
     const checkImageStmt = db.prepare('SELECT id FROM images WHERE id = ?');
-    
-    // 插入或更新 EXIF 数据
+    const checkExistingExifStmt = db.prepare('SELECT image_id FROM exif_data WHERE image_id = ?');
     const insertExifStmt = db.prepare(`
-      INSERT OR REPLACE INTO exif_data (
+      INSERT INTO exif_data (
         image_id, camera_model, lens_model, f_number, exposure_time, 
-        iso, focal_length, location, date_time, raw_data, updated_at
+        iso, focal_length, location, date_time, raw_data, latitude, longitude, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
     
-    // 安全地处理每个 EXIF 数据
-    try {
-      // 使用 Object.entries 安全地迭代对象
-      const entries = Object.entries(exifData);
-      console.log(`成功获取 ${entries.length} 个 EXIF 数据项`);
-      
-      for (const entry of entries) {
-        const imageId = entry[0];
-        const data = entry[1];
-        
-        if (!imageId) {
-          console.warn(`跳过无效的 EXIF 数据项: 图片ID为空`);
+    // 处理每个 EXIF 数据项
+    for (const [imageId, data] of Object.entries(exifData)) {
+      try {
+        if (!imageId || !data || typeof data !== 'object') {
           skippedCount++;
           continue;
         }
         
-        if (!data || typeof data !== 'object' || data === null) {
-          console.warn(`跳过无效的 EXIF 数据项: ${imageId} 的数据无效`);
-          skippedCount++;
-          continue;
-        }
-        
-        // 将文件扩展名转换为 .webp 以匹配数据库中的图片 ID
-        const originalId = imageId;
-        const newId = originalId.replace(/\.(jpeg|jpg|JPG|JPEG)$/i, '.webp');
+        // 转换文件扩展名为 .webp
+        const newId = imageId.replace(/\.(jpeg|jpg|JPG|JPEG)$/i, '.webp');
         
         // 检查图片是否存在
         const image = checkImageStmt.get(newId);
-        
-        if (image) {
-          try {
-            // 将完整数据序列化为 JSON
-            const rawData = JSON.stringify(data);
-            
-            // 提取 EXIF 数据字段，使用安全的访问方式
-            const cameraModel = data.CameraModel || null;
-            const lensModel = data.LensModel || null;
-            const fNumber = data.FNumber || null;
-            const exposureTime = data.ExposureTime || null;
-            const iso = data.ISO || null;
-            const focalLength = data.FocalLength || null;
-            const location = data.Location || null;
-            const dateTime = data.DateTime || null;
-            
-            // 插入 EXIF 数据
-            insertExifStmt.run(
-              newId,
-              cameraModel,
-              lensModel,
-              fNumber,
-              exposureTime,
-              iso,
-              focalLength,
-              location,
-              dateTime,
-              rawData
-            );
-            
-            processedCount++;
-            console.log(`更新 EXIF 数据: ${newId}`);
-          } catch (dataError) {
-            console.error(`处理 EXIF 数据项 ${newId} 时出错:`, dataError);
-            skippedCount++;
-          }
-        } else {
-          console.log(`跳过 EXIF 数据: ${originalId} (图片不存在，转换后ID: ${newId})`);
+        if (!image) {
           skippedCount++;
+          continue;
         }
+        
+        // 检查是否已存在 EXIF 数据
+        const existingExif = checkExistingExifStmt.get(newId);
+        if (existingExif) {
+          existingCount++;
+          continue;
+        }
+        
+        // 解析数据
+        const finalData = {
+          camera_model: data.CameraModel || null,
+          lens_model: data.LensModel || null,
+          f_number: parseFloat(data.FNumber) || null,
+          exposure_time: data.ExposureTime || null,
+          iso: parseInt(data.ISO) || null,
+          focal_length: data.FocalLength || null,
+          location: data.Location || null,
+          date_time: data.DateTime || null,
+          latitude: parseFloat(data.GPSLatitude) || 
+                   parseFloat(data.latitude) || 
+                   parseFloat(data.Latitude) || null,
+          longitude: parseFloat(data.GPSLongitude) || 
+                    parseFloat(data.longitude) || 
+                    parseFloat(data.Longitude) || null
+        };
+        
+        // 保存原始数据
+        const rawData = JSON.stringify({
+          ...data,
+          _lastUpdate: new Date().toISOString()
+        });
+        
+        // 插入新数据
+        insertExifStmt.run(
+          newId,
+          finalData.camera_model,
+          finalData.lens_model,
+          finalData.f_number,
+          finalData.exposure_time,
+          finalData.iso,
+          finalData.focal_length,
+          finalData.location,
+          finalData.date_time,
+          rawData,
+          finalData.latitude,
+          finalData.longitude
+        );
+        
+        insertedCount++;
+        processedCount++;
+      } catch (itemError) {
+        skippedCount++;
       }
-    } catch (iterationError) {
-      console.error('迭代 EXIF 数据时出错:', iterationError);
-      throw new Error(`迭代 EXIF 数据时出错: ${iterationError instanceof Error ? iterationError.message : String(iterationError)}`);
     }
     
     // 提交事务
     db.prepare('COMMIT').run();
-    console.log(`处理了 ${processedCount} 条 EXIF 数据，跳过了 ${skippedCount} 条`);
+    
+    const summary = `处理了 ${processedCount} 条 EXIF 数据，` +
+                   `插入了 ${insertedCount} 条新数据，` +
+                   `跳过了 ${existingCount} 条已存在数据，` +
+                   `跳过了 ${skippedCount} 条无效数据`;
     
     db.close();
     
-    // 如果没有处理任何数据但也没有错误，返回警告状态
+    // 返回结果
     if (processedCount === 0 && skippedCount > 0) {
       return { 
         success: true, 
@@ -538,9 +495,16 @@ export function saveExifData(exifData: Record<string, any>) {
     
     return { 
       success: true, 
-      message: `EXIF 数据已成功保存到数据库，处理了 ${processedCount} 条，跳过了 ${skippedCount} 条`,
-      status: 'success'
+      message: summary,
+      status: 'success',
+      details: {
+        processed: processedCount,
+        inserted: insertedCount,
+        existing: existingCount,
+        skipped: skippedCount
+      }
     };
+    
   } catch (error) {
     // 回滚事务
     try {
@@ -572,22 +536,15 @@ export function getAlbums() {
 export function getAlbumWithImages(albumId: string) {
   const db = getDb();
   
-  console.log(`获取相册详情: ${albumId}`);
-  
   // 获取相册基本信息
   const album = db.prepare('SELECT * FROM albums WHERE id = ?').get(albumId) as AlbumRecord | null;
   
   if (album) {
-    console.log(`找到相册: ${album.title}`);
-    
     // 获取相册中的图片
     const images = db.prepare('SELECT * FROM images WHERE album_id = ?').all(albumId) as ImageRecord[];
-    console.log(`相册中的图片数量: ${images.length}`);
     
     // 将图片添加到相册对象中
     album.images = images;
-  } else {
-    console.log(`未找到相册: ${albumId}`);
   }
   
   db.close();
@@ -696,6 +653,75 @@ export function getLastUpdatedTime() {
     albums: formatToBeijingTime(albumsUpdate?.last_updated || null),
     exif: formatToBeijingTime(exifUpdate?.last_updated || null)
   };
+}
+
+// 获取带地理位置的照片
+export function getPhotosWithLocation() {
+  initDb();
+  
+  // 从数据库获取所有图片，包含EXIF数据
+  const images = getAllImages(true);
+  
+  // 过滤出有经纬度信息的图片
+  const geotaggedImages = images.filter(image => {
+    // 检查是否有EXIF数据
+    if (!image.exif || !image.exif.raw_data) {
+      return false;
+    }
+    
+    // 尝试解析原始EXIF数据
+    let rawExif = null;
+    try {
+      if (typeof image.exif.raw_data === 'string') {
+        rawExif = JSON.parse(image.exif.raw_data);
+      }
+    } catch (e) {
+      console.error(`解析图片 ${image.id} 的EXIF数据失败:`, e);
+      return false;
+    }
+    
+    // 检查是否有GPS坐标
+    return rawExif && 
+      ((rawExif.Latitude !== undefined && rawExif.Longitude !== undefined) || 
+      (rawExif.GPSLatitude !== undefined && rawExif.GPSLongitude !== undefined));
+  });
+  
+  // 转换为前端需要的格式
+  const mapData = geotaggedImages.map(image => {
+    // 解析原始EXIF数据
+    let rawExif = {};
+    try {
+      if (image.exif?.raw_data && typeof image.exif.raw_data === 'string') {
+        rawExif = JSON.parse(image.exif.raw_data);
+      }
+    } catch (e) {
+      console.error(`解析图片 ${image.id} 的EXIF数据失败:`, e);
+    }
+    
+    // 从原始EXIF数据中提取经纬度
+    const latitude = rawExif.Latitude || rawExif.GPSLatitude || 0;
+    const longitude = rawExif.Longitude || rawExif.GPSLongitude || 0;
+    
+    return {
+      id: image.id,
+      url: image.url,
+      title: image.album_title || '未知相册',
+      location: image.exif?.location || '未知地点',
+      latitude: latitude,
+      longitude: longitude,
+      date: image.exif?.date_time || '未知时间',
+      cameraModel: image.exif?.camera_model || '未知相机',
+      exif: {
+        FNumber: image.exif?.f_number,
+        ISO: image.exif?.iso,
+        FocalLength: image.exif?.focal_length,
+        ExposureTime: image.exif?.exposure_time,
+        LensModel: image.exif?.lens_model,
+      }
+    };
+  });
+  
+  return mapData;
 }
 
 // 初始化数据库

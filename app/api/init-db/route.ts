@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
       dbExists
     });
   } catch (error) {
-    console.error('数据库初始化失败:', error);
     return NextResponse.json(
       { success: false, error: '数据库初始化失败' },
       { status: 500 }

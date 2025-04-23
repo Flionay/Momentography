@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('更新星级失败:', error);
     return NextResponse.json(
       { success: false, error: '更新星级失败' },
       { status: 500 }

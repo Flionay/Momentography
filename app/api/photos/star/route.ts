@@ -4,7 +4,8 @@ import path from 'path';
 
 export async function POST(request: Request) {
   // 验证管理员身份
-  if (cookies().get('admin-auth')?.value !== 'true') {
+  const cookieStore = await cookies();
+  if (cookieStore.get('admin-auth')?.value !== 'true') {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
     });

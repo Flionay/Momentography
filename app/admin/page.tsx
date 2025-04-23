@@ -19,11 +19,15 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Info
+  Info,
+  Warning,
+  Database,
+  DownloadSimple
 } from '@phosphor-icons/react';
 import { parseExifDate } from '@/app/utils/dateFormat';
 import { updateImageStar } from '@/app/utils/dbUtils';
 import { updateAlbumsJsonData } from '@/app/utils/ossUtils';
+import PhotoDetail from '@/app/components/PhotoDetail';
 
 // 定义照片接口
 interface Photo {
@@ -65,6 +69,8 @@ export default function AdminPage() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success?: boolean; message?: string } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
 
   // 加载照片数据
@@ -152,17 +158,20 @@ export default function AdminPage() {
     };
   }, []);
 
-  // 处理星级评分更新
+  // 处理照片点击事件
+  const handlePhotoClick = (photo: Photo) => {
+    setSelectedPhoto(photo);
+  };
+
+  // 处理照片详情关闭事件
+  const handlePhotoDetailClose = () => {
+    setSelectedPhoto(null);
+  };
+
+  // 处理星级更新
   const handleStarUpdate = async (photoId: string, newStar: number) => {
     try {
-      // 更新本地状态
-      setPhotos(prevPhotos => 
-        prevPhotos.map(photo => 
-          photo.id === photoId ? { ...photo, star: newStar } : photo
-        )
-      );
-      
-      // 发送更新请求到服务器
+      // 调用API更新星级
       const response = await fetch('/api/photos/update-star', {
         method: 'POST',
         headers: {
@@ -175,11 +184,15 @@ export default function AdminPage() {
         throw new Error('更新星级失败');
       }
       
-      console.log(`照片 ${photoId} 的星级已更新为 ${newStar}`);
+      // 更新本地状态
+      setPhotos(prevPhotos => 
+        prevPhotos.map(photo => 
+          photo.id === photoId ? { ...photo, star: newStar } : photo
+        )
+      );
     } catch (error) {
-      console.error('更新星级时出错:', error);
-      // 如果失败，回滚本地状态
-      loadPhotos();
+      console.error('更新星级失败:', error);
+      throw error;
     }
   };
 
@@ -205,6 +218,74 @@ export default function AdminPage() {
     } finally {
       setSyncLoading(false);
     }
+  };
+
+  // 处理数据库备份
+  const handleDatabaseBackup = () => {
+    // 创建一个隐藏的a标签用于下载
+    const link = document.createElement('a');
+    link.href = '/api/data/backup';
+    link.download = `gallery-backup-${new Date().toISOString()}.db`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 检查EXIF数据是否完善
+  const isExifComplete = (exif?: Photo['exif']): boolean => {
+    if (!exif) return false;
+    
+    // 检查关键EXIF字段是否存在且不为null或"未知"
+    const requiredFields = [
+      'camera_model',
+      'lens_model',
+      'f_number',
+      'exposure_time',
+      'iso',
+      'focal_length',
+      'location',
+      'date_time'
+    ];
+    
+    for (const field of requiredFields) {
+      const value = exif[field as keyof typeof exif];
+      if (!value || 
+          (typeof value === 'string' && value.toLowerCase().includes('未知')) ||
+          value === null) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // 计算EXIF完善度
+  const calculateExifCompleteness = (exif?: Photo['exif']): number => {
+    if (!exif) return 0;
+    
+    const requiredFields = [
+      'camera_model',
+      'lens_model',
+      'f_number',
+      'exposure_time',
+      'iso',
+      'focal_length',
+      'location',
+      'date_time'
+    ];
+    
+    let completedFields = 0;
+    
+    for (const field of requiredFields) {
+      const value = exif[field as keyof typeof exif];
+      if (value && 
+          !(typeof value === 'string' && value.toLowerCase().includes('未知')) &&
+          value !== null) {
+        completedFields++;
+      }
+    }
+    
+    return Math.round((completedFields / requiredFields.length) * 100);
   };
 
   // 格式化日期时间
@@ -244,28 +325,53 @@ export default function AdminPage() {
   const filteredAndSortedPhotos = photos
     .filter(photo => {
       // 搜索过滤
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = 
-        !searchTerm || 
-        photo.title.toLowerCase().includes(searchLower) ||
-        photo.location.toLowerCase().includes(searchLower) ||
-        photo.album_title.toLowerCase().includes(searchLower);
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          (photo.title && photo.title.toLowerCase().includes(searchLower)) ||
+          (photo.location && photo.location.toLowerCase().includes(searchLower)) ||
+          (photo.album_title && photo.album_title.toLowerCase().includes(searchLower));
+        
+        if (!matchesSearch) return false;
+      }
       
       // 相机过滤
-      const matchesCamera = filterCamera === 'all' || photo.cameraModel === filterCamera;
+      if (filterCamera !== 'all' && photo.cameraModel !== filterCamera) {
+        return false;
+      }
       
       // 位置过滤
-      const matchesLocation = filterLocation === 'all' || photo.location === filterLocation;
+      if (filterLocation !== 'all' && photo.location !== filterLocation) {
+        return false;
+      }
       
-      return matchesSearch && matchesCamera && matchesLocation;
+      // 只显示不完善的照片
+      if (showOnlyIncomplete) {
+        return !isExifComplete(photo.exif);
+      }
+      
+      return true;
     })
     .sort((a, b) => {
       if (sortBy === 'date') {
-        const dateA = a.parsedDate ? a.parsedDate.getTime() : 0;
-        const dateB = b.parsedDate ? b.parsedDate.getTime() : 0;
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        // 按照日期排序
+        if (a.date && b.date) {
+          return sortOrder === 'asc' 
+            ? new Date(a.date).getTime() - new Date(b.date).getTime()
+            : new Date(b.date).getTime() - new Date(a.date).getTime();
+        }
+        
+        // 如果没有日期，有日期的排在前面
+        if (a.date && !b.date) return sortOrder === 'asc' ? -1 : 1;
+        if (!a.date && b.date) return sortOrder === 'asc' ? 1 : -1;
+        
+        // 如果都没有日期，按照标题排序
+        return (a.title || '').localeCompare(b.title || '');
       } else {
-        return sortOrder === 'asc' ? a.star - b.star : b.star - a.star;
+        // 按照星级排序
+        return sortOrder === 'asc' 
+          ? (a.star || 0) - (b.star || 0)
+          : (b.star || 0) - (a.star || 0);
       }
     });
 
@@ -284,6 +390,7 @@ export default function AdminPage() {
               摄影管理系统
             </h1>
             
+            {/* 同步按钮组 */}
             <div className="flex flex-wrap gap-3">
               <motion.button
                 onClick={handleSyncData}
@@ -307,6 +414,16 @@ export default function AdminPage() {
                     同步 OSS 数据
                   </>
                 )}
+              </motion.button>
+              
+              <motion.button
+                onClick={handleDatabaseBackup}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-md transition-colors flex items-center"
+              >
+                <DownloadSimple size={18} className="mr-2" />
+                备份数据库
               </motion.button>
               
               <Link 
@@ -369,6 +486,19 @@ export default function AdminPage() {
               />
             </div>
             
+            {/* 只看不完善按钮 */}
+            <button
+              onClick={() => setShowOnlyIncomplete(!showOnlyIncomplete)}
+              className={`px-4 py-2 rounded-lg flex items-center ${
+                showOnlyIncomplete 
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' 
+                  : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              <Warning size={18} className="mr-2" />
+              {showOnlyIncomplete ? '只看不完善' : '显示不完善照片'}
+            </button>
+            
             {/* 排序控制 */}
             <div className="flex gap-2">
               <select
@@ -391,7 +521,11 @@ export default function AdminPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className="p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white flex items-center"
+                  className={`p-2 border rounded-lg flex items-center ${
+                    showFilters 
+                      ? 'bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/50 dark:border-blue-700 dark:text-blue-300' 
+                      : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-white'
+                  }`}
                   title="更多筛选"
                 >
                   <Sliders size={20} />
@@ -493,12 +627,25 @@ export default function AdminPage() {
                 </button>
               </div>
             )}
+            
+            {showOnlyIncomplete && (
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
+                <Warning size={14} className="mr-1" />
+                <span className="font-medium">只看不完善</span>
+                <button 
+                  onClick={() => setShowOnlyIncomplete(false)}
+                  className="ml-2 text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
           </div>
           
           {/* 照片数量统计 */}
           <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             共 {filteredAndSortedPhotos.length} 张照片
-            {(searchTerm || filterCamera !== 'all' || filterLocation !== 'all') && ' (已筛选)'}
+            {(searchTerm || filterCamera !== 'all' || filterLocation !== 'all' || showOnlyIncomplete) && ' (已筛选)'}
           </div>
         </motion.div>
         
@@ -530,7 +677,8 @@ export default function AdminPage() {
                 <motion.div 
                   key={photo.id} 
                   whileHover={{ y: -5 }}
-                  className="bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all"
+                  className="bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  onClick={() => handlePhotoClick(photo)}
                 >
                   {/* 照片预览 */}
                   <div className="relative aspect-[4/3] group">
@@ -541,6 +689,21 @@ export default function AdminPage() {
                       className="object-cover"
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     />
+                    
+                    {/* EXIF状态标记 */}
+                    <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${
+                      isExifComplete(photo.exif)
+                        ? 'bg-green-500 text-white'
+                        : photo.exif && calculateExifCompleteness(photo.exif) > 50
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-red-500 text-white'
+                    }`}>
+                      {isExifComplete(photo.exif)
+                        ? 'EXIF 已完善'
+                        : photo.exif && calculateExifCompleteness(photo.exif) > 0
+                          ? `完善度 ${calculateExifCompleteness(photo.exif)}%`
+                          : 'EXIF 缺失'}
+                    </div>
                     
                     {/* 悬停时显示的信息 */}
                     <div className="absolute inset-0 bg-black bg-opacity-60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
@@ -581,7 +744,10 @@ export default function AdminPage() {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
-                            onClick={() => handleStarUpdate(photo.id, star)}
+                            onClick={(e) => {
+                              e.stopPropagation(); // 阻止冒泡，避免触发照片点击事件
+                              handleStarUpdate(photo.id, star);
+                            }}
                             className={`w-6 h-6 transition-colors ${
                               star <= photo.star
                                 ? 'text-yellow-400 hover:text-yellow-500'
@@ -605,6 +771,17 @@ export default function AdminPage() {
           )}
         </motion.div>
       </div>
+      
+      {/* 照片详情弹窗 */}
+      {selectedPhoto && (
+        <PhotoDetail
+          photo={selectedPhoto}
+          isOpen={!!selectedPhoto}
+          onClose={handlePhotoDetailClose}
+          onStarUpdate={handleStarUpdate}
+          onRefresh={loadPhotos}
+        />
+      )}
     </div>
   );
 } 

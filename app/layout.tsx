@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navigation from "./components/Navigation";
 import Footer from "./components/Footer";
-import 'leaflet/dist/leaflet.css';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Momentography | 摄影作品展示",
   description: "个人摄影作品展示网站，记录生活中的美好瞬间",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

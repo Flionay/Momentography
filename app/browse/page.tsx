@@ -46,6 +46,8 @@ interface Photo {
     focal_length: string;
     location: string;
     date_time: string;
+    latitude?: number;
+    longitude?: number;
     raw?: any;
   };
 }
@@ -56,7 +58,6 @@ const transformCoordinates = (coordinates: [number, number]): [number, number] =
   if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2 ||
       typeof coordinates[0] !== 'number' || typeof coordinates[1] !== 'number' ||
       isNaN(coordinates[0]) || isNaN(coordinates[1])) {
-    console.error('无效的坐标:', coordinates);
     return MAP_CONFIG.CHINA_CENTER; // 返回默认中心点
   }
   
@@ -82,7 +83,6 @@ const parseGPSCoordinates = (exifData: any): [number, number] | null => {
     }
     return null;
   } catch (error) {
-    console.error('解析GPS坐标失败:', error);
     return null;
   }
 };
@@ -114,18 +114,29 @@ export default function BrowsePage() {
         
         // 处理照片数据
         const processedPhotos = data.photos.map((photo: any) => {
-          // 解析日期
-          const parsedDate = photo.date ? parseExifDate(photo.date) : null;
+          // 优先使用 EXIF 中的日期，如果没有则使用照片的日期
+          const date = photo.exif?.date_time || photo.date;
+          const parsedDate = date ? parseExifDate(date) : null;
           
           // 解析 GPS 坐标
           const coordinates = photo.exif ? parseGPSCoordinates(photo.exif) : null;
+          
+          // 创建带有latitude和longitude属性的exif对象
+          let exifWithCoordinates = photo.exif ? { ...photo.exif } : undefined;
+          
+          // 如果有坐标信息，添加到exif对象中
+          if (coordinates && exifWithCoordinates) {
+            exifWithCoordinates.latitude = coordinates[0];
+            exifWithCoordinates.longitude = coordinates[1];
+          }
           
           return {
             id: photo.id,
             url: photo.url,
             title: photo.title || photo.album_title || '',
-            location: photo.location || '',
-            date: photo.date || '',
+            // 优先使用 EXIF 中的位置信息
+            location: photo.exif?.location || photo.location || '',
+            date,
             parsedDate,
             cameraModel: photo.exif?.camera_model || '',
             star: photo.star || 0,
@@ -133,19 +144,18 @@ export default function BrowsePage() {
             album_id: photo.album_id,
             album_title: photo.album_title || '',
             coordinates,
-            exif: photo.exif
+            exif: exifWithCoordinates
           };
         });
         
-        // 提取所有相机型号和地点
-        const uniqueCameras = [...new Set(processedPhotos.map((p: Photo) => p.cameraModel).filter(Boolean))] as string[];
-        const uniqueLocations = [...new Set(processedPhotos.map((p: Photo) => p.location).filter(Boolean))] as string[];
+        // 提取所有相机型号和地点（优先使用 EXIF 中的信息）
+        const uniqueCameras = [...new Set(processedPhotos.map((p: Photo) => p.exif?.camera_model || p.cameraModel).filter(Boolean))] as string[];
+        const uniqueLocations = [...new Set(processedPhotos.map((p: Photo) => p.exif?.location || p.location).filter(Boolean))] as string[];
         
         setCameras(uniqueCameras);
         setLocations(uniqueLocations);
         setPhotos(processedPhotos);
       } catch (error) {
-        console.error('加载照片时出错:', error);
       } finally {
         setIsLoading(false);
       }
@@ -157,11 +167,12 @@ export default function BrowsePage() {
   // 筛选和排序照片
   const filteredAndSortedPhotos = photos
     .filter(photo => 
-      (filterCamera === 'all' || photo.cameraModel === filterCamera) &&
-      (filterLocation === 'all' || photo.location === filterLocation)
+      (filterCamera === 'all' || (photo.exif?.camera_model || photo.cameraModel) === filterCamera) &&
+      (filterLocation === 'all' || (photo.exif?.location || photo.location) === filterLocation)
     )
     .sort((a, b) => {
       if (sortBy === 'date') {
+        // 使用 parsedDate 进行排序
         const dateA = a.parsedDate ? a.parsedDate.getTime() : 0;
         const dateB = b.parsedDate ? b.parsedDate.getTime() : 0;
         return dateB - dateA; // 从新到旧
@@ -205,7 +216,6 @@ export default function BrowsePage() {
             },
             body: JSON.stringify({ photoId, likes: newLikes }),
           }).catch(error => {
-            console.error('保存点赞数据失败:', error);
           });
           
           // 记录当前页面已点击的照片
@@ -223,41 +233,67 @@ export default function BrowsePage() {
   return (
     <div className="min-h-screen py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as 'date' | 'star')}
-          className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm 
-            dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
-        >
-          <option value="date">按时间排序</option>
-          <option value="star">按评分排序</option>
-        </select>
-        
-        <select
-          value={filterCamera}
-          onChange={(e) => setFilterCamera(e.target.value)}
-          className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm 
-            dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
-        >
-          <option value="all">所有相机</option>
-          {cameras.map(camera => (
-            <option key={camera} value={camera}>{camera}</option>
-          ))}
-        </select>
-        
-        <select
-          value={filterLocation}
-          onChange={(e) => setFilterLocation(e.target.value)}
-          className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm 
-            dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
-        >
-          <option value="all">所有地点</option>
-          {locations.map(location => (
-            <option key={location} value={location}>{location}</option>
-          ))}
-        </select>
-      </div>
+        {/* 筛选工具栏 - 优化UI */}
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* 排序选择器 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">排序：</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'date' | 'star')}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm 
+                  dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200
+                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                  transition-colors duration-200"
+              >
+                <option value="date">按时间排序</option>
+                <option value="star">按评分排序</option>
+              </select>
+            </div>
+
+            {/* 相机筛选器 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">相机：</span>
+              <select
+                value={filterCamera}
+                onChange={(e) => setFilterCamera(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm 
+                  dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200
+                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                  transition-colors duration-200"
+              >
+                <option value="all">所有相机</option>
+                {cameras.map(camera => (
+                  <option key={camera} value={camera}>{camera}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 地点筛选器 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">地点：</span>
+              <select
+                value={filterLocation}
+                onChange={(e) => setFilterLocation(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm 
+                  dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200
+                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                  transition-colors duration-200"
+              >
+                <option value="all">所有地点</option>
+                {locations.map(location => (
+                  <option key={location} value={location}>{location}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 显示筛选结果数量 */}
+            <div className="ml-auto text-sm text-gray-500 dark:text-gray-400">
+              显示 {filteredAndSortedPhotos.length} 张照片
+            </div>
+          </div>
+        </div>
 
         {/* 照片网格 */}
         {isLoading ? (
@@ -365,11 +401,11 @@ export default function BrowsePage() {
         onClose={() => setSelectedPhoto(null)}
         className="relative z-50"
       >
-        <div className="fixed inset-0 bg-black/90" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/95" aria-hidden="true" />
         
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <Dialog.Panel className="w-full max-w-6xl transform rounded-2xl bg-black text-left align-middle shadow-xl transition-all">
+            <Dialog.Panel className="w-full max-w-7xl transform rounded-2xl bg-black text-left align-middle shadow-xl transition-all">
               {selectedPhoto && (
                 <div className="relative">
                   {/* 关闭按钮 - 调整位置到左上角 */}
@@ -382,26 +418,27 @@ export default function BrowsePage() {
 
                   {/* 主要内容区域 */}
                   <div className="flex flex-col lg:flex-row">
-                    {/* 左侧大图 */}
-                    <div className="relative lg:w-3/4 aspect-[4/3]">
+                    {/* 左侧大图 - 增加尺寸和优化显示效果 */}
+                    <div className="relative lg:w-4/5 aspect-[4/3] bg-black">
                       <Image
                         src={selectedPhoto.url}
                         alt={selectedPhoto.title}
                         fill
                         className="object-contain"
                         priority
+                        quality={95}
                       />
                     </div>
 
-                    {/* 右侧信息面板 */}
-                    <div className="lg:w-1/4 bg-white dark:bg-gray-900 p-6 overflow-y-auto max-h-[calc(100vh-2rem)]">
+                    {/* 右侧信息面板 - 优化布局和样式 */}
+                    <div className="lg:w-1/5 bg-black/50 backdrop-blur-sm p-6 overflow-y-auto max-h-[calc(100vh-2rem)]">
                       {/* 标题和评分 */}
-                      <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-medium dark:text-white">{selectedPhoto.title}</h2>
+                      <div className="flex items-center justify-between mb-8">
+                        <h2 className="text-xl font-medium text-white">{selectedPhoto.title}</h2>
                         <div className="flex items-center space-x-4">
                           <div className="flex items-center">
                             <Star weight="fill" className="text-yellow-400" size={20} />
-                            <span className="ml-1 text-lg dark:text-white">{selectedPhoto.star}</span>
+                            <span className="ml-1 text-lg text-white">{selectedPhoto.star}</span>
                           </div>
                           <div className="flex items-center">
                             <Heart 
@@ -409,72 +446,72 @@ export default function BrowsePage() {
                               className={`${clickedPhotos.has(selectedPhoto.id) ? 'text-red-500' : 'text-gray-400'}`}
                               size={20} 
                             />
-                            <span className="ml-1 text-lg dark:text-white">{selectedPhoto.likes}</span>
+                            <span className="ml-1 text-lg text-white">{selectedPhoto.likes}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* 地图 - 优化缩放级别并延迟加载 */}
-                      <div className="mb-6 rounded-lg overflow-hidden h-48">
-                        {typeof window !== 'undefined' && selectedPhoto.coordinates && (
+                      {/* 地图 - 优化显示效果 */}
+                      <div className="mb-8 rounded-lg overflow-hidden h-48 border border-white/10">
+                        {typeof window !== 'undefined' && selectedPhoto.exif?.latitude && selectedPhoto.exif?.longitude && (
                           <AMapContainer
-                            center={transformCoordinates(selectedPhoto.coordinates)}
+                            center={[selectedPhoto.exif.latitude, selectedPhoto.exif.longitude]}
                             zoom={MAP_CONFIG.DETAIL_ZOOM}
                             marker={true}
-                            location={selectedPhoto.location}
+                            location={selectedPhoto.exif.location || selectedPhoto.location}
                           />
                         )}
-                        {typeof window !== 'undefined' && !selectedPhoto.coordinates && (
-                          <div className="h-full w-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-500">
+                        {typeof window !== 'undefined' && (!selectedPhoto.exif?.latitude || !selectedPhoto.exif?.longitude) && (
+                          <div className="h-full w-full flex items-center justify-center bg-black/30 text-gray-400">
                             <MapPin size={24} className="mr-2" />
                             <span>该照片没有位置信息</span>
                           </div>
                         )}
                       </div>
 
-                      {/* 拍摄信息 */}
-                      <div className="space-y-6">
+                      {/* 拍摄信息 - 优化布局和样式 */}
+                      <div className="space-y-8">
                         {/* 基本信息 */}
-                        <div className="space-y-3">
-                          <div className="flex items-center text-gray-600 dark:text-gray-300">
-                            <MapPin weight="fill" size={18} className="mr-2" />
-                            <span className="text-sm">{selectedPhoto.location}</span>
+                        <div className="space-y-4">
+                          <div className="flex items-center text-gray-300">
+                            <MapPin weight="fill" size={18} className="mr-2 text-blue-400" />
+                            <span className="text-sm">{selectedPhoto.exif?.location || selectedPhoto.location}</span>
                           </div>
-                          <div className="flex items-center text-gray-600 dark:text-gray-300">
-                            <Calendar weight="fill" size={18} className="mr-2" />
-                            <span className="text-sm">{formatDate(selectedPhoto.date, 'full')}</span>
+                          <div className="flex items-center text-gray-300">
+                            <Calendar weight="fill" size={18} className="mr-2 text-green-400" />
+                            <span className="text-sm">{selectedPhoto.exif?.date_time ? formatDate(selectedPhoto.exif.date_time, 'full') : formatDate(selectedPhoto.date, 'full')}</span>
                           </div>
-                          <div className="flex items-center text-gray-600 dark:text-gray-300">
-                            <Camera weight="fill" size={18} className="mr-2" />
-                            <span className="text-sm">{selectedPhoto.cameraModel}</span>
+                          <div className="flex items-center text-gray-300">
+                            <Camera weight="fill" size={18} className="mr-2 text-purple-400" />
+                            <span className="text-sm">{selectedPhoto.exif?.camera_model || selectedPhoto.cameraModel}</span>
                           </div>
                         </div>
 
-                        {/* EXIF 信息 */}
+                        {/* EXIF 信息 - 优化显示效果 */}
                         {selectedPhoto.exif && (
-                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                          <div className="border-t border-white/10 pt-6">
+                            <h3 className="text-sm font-medium text-white mb-4">
                               拍摄参数
                             </h3>
                             <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div className="space-y-2">
-                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center text-gray-300">
                                   <span>光圈</span>
-                                  <span className="font-mono">ƒ/{selectedPhoto.exif.f_number}</span>
+                                  <span className="font-mono text-white">ƒ/{selectedPhoto.exif.f_number}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                <div className="flex justify-between items-center text-gray-300">
                                   <span>快门速度</span>
-                                  <span className="font-mono">{selectedPhoto.exif.exposure_time}s</span>
+                                  <span className="font-mono text-white">{selectedPhoto.exif.exposure_time}s</span>
                                 </div>
                               </div>
-                              <div className="space-y-2">
-                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center text-gray-300">
                                   <span>ISO</span>
-                                  <span className="font-mono">{selectedPhoto.exif.iso}</span>
+                                  <span className="font-mono text-white">{selectedPhoto.exif.iso}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                                <div className="flex justify-between items-center text-gray-300">
                                   <span>焦距</span>
-                                  <span className="font-mono">{selectedPhoto.exif.focal_length}mm</span>
+                                  <span className="font-mono text-white">{selectedPhoto.exif.focal_length}mm</span>
                                 </div>
                               </div>
                             </div>
@@ -482,10 +519,10 @@ export default function BrowsePage() {
                         )}
 
                         {/* 镜头信息 */}
-                        {selectedPhoto.exif && selectedPhoto.exif.lens_model && (
-                          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                            <div className="flex items-center text-gray-600 dark:text-gray-300">
-                              <Camera weight="fill" size={16} className="mr-2" />
+                        {selectedPhoto.exif?.lens_model && (
+                          <div className="border-t border-white/10 pt-6">
+                            <div className="flex items-center text-gray-300">
+                              <Camera weight="fill" size={16} className="mr-2 text-orange-400" />
                               <span className="text-sm">{selectedPhoto.exif.lens_model}</span>
                             </div>
                           </div>

@@ -375,12 +375,11 @@ export default function MapPage() {
         }
         
         const mapData = await response.json();
-        console.log(`获取到 ${mapData.length} 张带地理位置的照片`);
         
         // 直接使用API返回的数据
         setPhotos(mapData);
       } catch (error) {
-        console.error('加载照片数据时出错:', error);
+        setError('加载照片数据时出错');
       } finally {
         setIsLoading(false);
         setIsLoaded(true);

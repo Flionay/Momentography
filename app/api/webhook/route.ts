@@ -46,11 +46,9 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '未知错误';
-    console.error('Webhook 处理错误:', errorMessage);
-    logUpdate('webhook', 'error', `Webhook 处理错误: ${errorMessage}`);
+    logUpdate('webhook', 'error', `Webhook 处理错误: ${error instanceof Error ? error.message : '未知错误'}`);
     return NextResponse.json(
-      { success: false, message: `服务器错误: ${errorMessage}`, status: 'error' },
+      { success: false, message: `服务器错误: ${error instanceof Error ? error.message : '未知错误'}`, status: 'error' },
       { status: 500 }
     );
   }

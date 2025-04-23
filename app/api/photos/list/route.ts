@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
       photos
     });
   } catch (error) {
-    console.error('获取照片列表失败:', error);
     return NextResponse.json(
       { success: false, error: '获取照片列表失败' },
       { status: 500 }
