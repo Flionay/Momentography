@@ -2,7 +2,7 @@
 FROM node:18
 
 # 安装 SQLite 依赖
-RUN apt-get update && apt-get install -y sqlite3 libsqlite3-dev
+RUN apt-get update && apt-get install -y sqlite3 libsqlite3-dev build-essential python3
 
 # 设置工作目录
 WORKDIR /usr/src/app
@@ -18,6 +18,9 @@ COPY . .
 
 # 创建数据目录
 RUN mkdir -p public/data data
+
+# 重新构建 better-sqlite3 原生模块
+RUN npm rebuild better-sqlite3
 
 # 构建项目
 RUN npm run build
